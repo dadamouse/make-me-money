@@ -28,7 +28,7 @@ create table if not exists holdings (
 
 create index if not exists idx_holdings_member on holdings (member_id);
 
--- 上市股票代號↔名稱對照（由 n8n sync-stock-list workflow 匯入）
+-- 上市股票代號↔名稱對照（server 啟動時自動從 TWSE OpenAPI 同步）
 create table if not exists stocks (
   stock_no text primary key,
   name text not null                   -- 公司簡稱，如 '台積電'、'緯創'
@@ -36,4 +36,5 @@ create table if not exists stocks (
 
 create index if not exists idx_stocks_name on stocks (name);
 
--- RLS 暫不啟用：僅由 n8n 以 service_role key 存取，不對外開放 anon API。
+-- RLS：僅由 server 以 service_role key 存取（service_role 會繞過 RLS），
+-- 若 Supabase 提示 Enable automatic RLS 可直接開啟，不影響 bot 運作。
