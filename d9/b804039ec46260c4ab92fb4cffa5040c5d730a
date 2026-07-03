@@ -1,0 +1,36 @@
+app/flex.py
+  s_d4fdd612f940f8::t_e47acd96b51cce 191-192,203,205,209-226
+app/handlers.py
+  s_d4fdd612f940f8::t_50dbfdba51b4b4 156
+  s_d4fdd612f940f8::t_822d3858b7b1bf 444-445
+  s_d4fdd612f940f8::t_73dee2eed5c1e6 227-271
+  s_d4fdd612f940f8::t_bd54deed9afada 9
+  s_d4fdd612f940f8::t_3ee635f98ef13a 12
+  s_d4fdd612f940f8::t_30aa92c0c0b009 272-316
+  s_d4fdd612f940f8::t_01d402ae933da6 426-433,446-447
+tests/test_bot.py
+  s_d4fdd612f940f8::t_b5569de466576b 501-543
+  s_d4fdd612f940f8::t_208fe7e4cbe253 373-374,382-384
+app/parser.py
+  s_d4fdd612f940f8::t_416500ddb33034 58
+  s_d4fdd612f940f8::t_c7bdb79fe714fb 53
+  s_d4fdd612f940f8::t_493aea11176eb0 7-16,20-21
+  s_d4fdd612f940f8::t_0b97c2632957d8 57
+  s_d4fdd612f940f8::t_56eab68679b73e 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d9b804039ec46260c4ab92fb4cffa5040c5d730a",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
