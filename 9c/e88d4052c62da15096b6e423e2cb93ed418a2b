@@ -1,0 +1,44 @@
+docs/setup.md
+  s_d4fdd612f940f8::t_c9cdab91f47f23 1-79
+n8n/src/line-stock-bot.main.js
+  s_d4fdd612f940f8::t_65a8637454b525 1-259
+n8n/line-stock-bot.json
+  s_d4fdd612f940f8::t_1c1b7b0e9261f8 1-55
+n8n/build.mjs
+  s_d4fdd612f940f8::t_a12d7316bc0c06 1-37,39-77
+  s_d4fdd612f940f8::t_10f14b798d5a67 38
+n8n/test/bot.integration.test.mjs
+  s_d4fdd612f940f8::t_335722e7827645 1-189
+.gitignore
+  s_d4fdd612f940f8::t_b2258cb5f01874 1-2
+n8n/src/parser.js
+  s_d4fdd612f940f8::t_fcc658132e6b1b 1-131
+docs/superpowers/specs/2026-07-03-line-stock-bot-design.md
+  s_d4fdd612f940f8::t_320a8ee797bf8f 1-162
+supabase/schema.sql
+  s_d4fdd612f940f8::t_6c657a2fad92da 1-39
+n8n/test/parser.test.mjs
+  s_d4fdd612f940f8::t_89e0c7c87fb610 1-119
+package.json
+  s_d4fdd612f940f8::t_7a2ff378d18028 1-9
+n8n/src/sync-stock-list.main.js
+  s_d4fdd612f940f8::t_62e3234adaa268 1-45
+n8n/sync-stock-list.json
+  s_d4fdd612f940f8::t_1c1b7b0e9261f8 1-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9ce88d4052c62da15096b6e423e2cb93ed418a2b",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
