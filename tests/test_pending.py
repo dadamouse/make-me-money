@@ -2,6 +2,14 @@ from app.parser import parse_command
 from app.pending import PendingChoices
 
 
+def test_parse_chart_aliases():
+    for text in ("圖2330", "線圖2330", "K線2330", "k線 2330", "圖 緯創"):
+        cmd = parse_command(text)
+        assert cmd.action == "chart", text
+    assert parse_command("圖2330").stock == "2330"
+    assert parse_command("圖 緯創").stock == "緯創"
+
+
 def test_parse_pick_numbers():
     assert parse_command("1").action == "pick"
     assert parse_command("1").index == 1

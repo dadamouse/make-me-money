@@ -13,7 +13,7 @@ HELP_TEXT = "\n".join(
         "刪除2330　　　　　刪除該檔所有紀錄",
         "我的股票　　　　　列出持股、損益與技術指標",
         "今日資訊　　　　　持股的重大訊息與除權息提醒",
-        "線圖2330　　　　　近幾個月 K 線圖（含均線與成交量）",
+        "圖2330　　　　　　近幾個月 K 線圖（含均線與成交量）",
     ]
 )
 
@@ -51,7 +51,7 @@ def parse_command(raw_text: str | None) -> Command:
         return Command(action="list")
     if re.fullmatch(r"今日資訊|重大訊息|新聞", text):
         return Command(action="news")
-    if m := re.fullmatch(r"(?:線圖|[Kk]線)\s*(\S+)", text):
+    if m := re.fullmatch(r"(?:線圖|[Kk]線|圖)\s*(\S+)", text):
         return Command(action="chart", stock=m.group(1))
     return Command(action="help")
 
