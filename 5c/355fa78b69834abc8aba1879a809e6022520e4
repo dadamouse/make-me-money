@@ -1,0 +1,63 @@
+requirements.txt
+  s_d4fdd612f940f8::t_f9769c5b504060 4
+app/flex.py
+  s_d4fdd612f940f8::t_d9499f70c13e9f 143-163
+tests/test_indicators.py
+  s_d4fdd612f940f8::t_081af43f903ca3 75
+supabase/migrations/20260704_add_high_low.sql
+  s_d4fdd612f940f8::t_224aff8f101a86 1,4
+app/handlers.py
+  s_d4fdd612f940f8::t_fdd4a43b2befcc 34-35,84-85
+  s_d4fdd612f940f8::t_a44131921d7d0b 32-33
+  s_d4fdd612f940f8::t_58767c5313036b 83
+  s_d4fdd612f940f8::t_402e51bd9db7c5 1,7-9,16-17,20,27-28,41,45-46,48,50,63-64,67,70,77,79,92,107-108,126,128,135-136,140,145,148-149,151,153,156-157,162,166-169,172-173,178,185,195,202-222,232-233,238,243,247,252,277,281,283,286,290,292,294,296,298-300
+tests/test_snapshot.py
+  s_d4fdd612f940f8::t_a19a0f26daf312 19,23,31,36,40,46
+app/config.py
+  s_d4fdd612f940f8::t_ee32423a15e2b8 33
+  s_d4fdd612f940f8::t_7ff90e1bbbf69c 20
+app/main.py
+  s_d4fdd612f940f8::t_9e9ba2c83f6144 53-59
+  s_d4fdd612f940f8::t_ef4b81bb83e411 32-38,40
+  s_d4fdd612f940f8::t_c538260f2b218f 67-68
+  s_d4fdd612f940f8::t_6546132bfdb102 87
+  s_d4fdd612f940f8::t_05a9dbcbdb8de7 8,10,12
+Dockerfile
+  s_d4fdd612f940f8::t_0b22127307ad9c 3-6
+app/parser.py
+  s_d4fdd612f940f8::t_fe4ca56f566c5b 54-55
+  s_d4fdd612f940f8::t_b170d38ac10be9 16
+tests/test_bot.py
+  s_d4fdd612f940f8::t_4d2ea7282c40f0 19
+  s_d4fdd612f940f8::t_2490a63a886652 372
+  s_d4fdd612f940f8::t_09e1b18e25f91a 394-417
+app/history.py
+  s_d4fdd612f940f8::t_bd6e94a2a58fe0 69-70,73-80
+  s_d4fdd612f940f8::t_8892f8eb8ffc62 40
+supabase/schema.sql
+  s_d4fdd612f940f8::t_e5e26eeae36725 47-48
+tests/test_chart.py
+  s_d4fdd612f940f8::t_181cb34488dd47 1-44
+app/snapshot.py
+  s_d4fdd612f940f8::t_43bbed1e88c863 31-32,43,54,66
+app/chart.py
+  s_d4fdd612f940f8::t_760ca3f02aeec7 1-85
+app/deps.py
+  s_d4fdd612f940f8::t_9c0e0fabbd3d62 1-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5c355fa78b69834abc8aba1879a809e6022520e4",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
