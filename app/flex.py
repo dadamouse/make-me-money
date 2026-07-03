@@ -64,7 +64,52 @@ def _stock_block(item: dict) -> dict:
     else:
         rows.append(_text(f"{market_prefix}觀察中（未記股數）", size="xs", color=MUTED_COLOR))
     rows += _indicator_rows(item, quote["close"])
+    rows += _flow_rows(item)
     return {"type": "box", "layout": "vertical", "spacing": "xs", "contents": rows}
+
+
+def _signed(value: float) -> str:
+    rounded = round(value)
+    return f"{'+' if rounded >= 0 else ''}{format_number(rounded)}"
+
+
+def _signed_lots(shares_value: float) -> str:
+    """買賣超股數 → 帶正負號的張數。"""
+    return _signed(shares_value / 1000)
+
+
+def _flow_rows(item: dict) -> list[dict]:
+    """三大法人買賣超與融資融券各一行；沒資料就省略。"""
+    rows = []
+    institutional = item.get("institutional")
+    if institutional and institutional.get("total_net") is not None:
+        parts = [
+            f"{label}{_signed_lots(value)}"
+            for label, value in (
+                ("外資", institutional.get("foreign_net")),
+                ("投信", institutional.get("trust_net")),
+                ("自營", institutional.get("dealer_net")),
+            )
+            if value is not None
+        ]
+        total = institutional["total_net"]
+        rows.append(
+            _text(f"法人 {_signed_lots(total)} 張（{'｜'.join(parts)}）", size="xxs", color=_pnl_color(total))
+        )
+    margin = item.get("margin")
+    if margin and margin.get("margin_balance") is not None:
+        margin_change = margin.get("margin_change")
+        short_balance = margin.get("short_balance")
+        text = f"融資 {format_number(margin['margin_balance'])} 張"
+        if margin_change is not None:
+            text += f"（{_signed(margin_change)}）"
+        if short_balance is not None:
+            text += f"｜融券 {format_number(short_balance)} 張"
+            short_change = margin.get("short_change")
+            if short_change is not None:
+                text += f"（{_signed(short_change)}）"
+        rows.append(_text(text, size="xxs", color=MUTED_COLOR))
+    return rows
 
 
 def _indicator_rows(item: dict, close: float) -> list[dict]:
@@ -82,7 +127,10 @@ def _indicator_rows(item: dict, close: float) -> list[dict]:
     if ind.get("rsi14") is not None:
         osc_parts.append(f"RSI {ind['rsi14']:.0f}")
     if ind.get("k") is not None and ind.get("d") is not None:
-        osc_parts.append(f"K {ind['k']:.0f}／D {ind['d']:.0f}")
+        kd_text = f"K {ind['k']:.0f}／D {ind['d']:.0f}"
+        if ind.get("j") is not None:
+            kd_text += f"／J {ind['j']:.0f}"
+        osc_parts.append(kd_text)
     if osc_parts:
         rows.append(_text("｜".join(osc_parts), size="xxs", color=MUTED_COLOR))
     return rows

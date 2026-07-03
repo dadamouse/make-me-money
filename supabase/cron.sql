@@ -31,6 +31,19 @@ select cron.schedule(
   $$
 );
 
+-- 晚間排程：台北 22:30（UTC 14:30）——TWSE 法人/融資融券資料傍晚後才公布，晚間再收一次當日資料
+select cron.schedule(
+  'daily-stock-snapshot-evening',
+  '30 14 * * 1-5',
+  $$
+  select net.http_post(
+    url := 'https://dadamouse-line-stock-bot.hf.space/admin/daily-snapshot',
+    headers := '{"x-cron-secret": "YOUR_CRON_SECRET"}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+  $$
+);
+
 -- 查看排程：select * from cron.job;
 -- 查看執行紀錄：select * from cron.job_run_details order by start_time desc limit 10;
 -- 取消排程：select cron.unschedule('daily-stock-snapshot');

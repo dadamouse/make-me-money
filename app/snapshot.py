@@ -1,5 +1,6 @@
-"""每日快照：收盤價＋成交量、融資融券、除權息日，全部 upsert 進 Supabase。"""
+"""每日快照：收盤價＋成交量、融資融券、三大法人、除權息日，全部 upsert 進 Supabase。"""
 import logging
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
@@ -10,6 +11,8 @@ from .twse import TwseClient
 logger = logging.getLogger(__name__)
 
 _CHUNK_SIZE = 500
+_TAIPEI_TZ = timezone(timedelta(hours=8))
+_T86_LOOKBACK_DAYS = 4
 
 
 def _num(raw) -> float | None:
@@ -118,6 +121,64 @@ def otc_margin_rows(data: list[dict]) -> list[dict]:
     return rows
 
 
+# ---------- 三大法人 ----------
+def listed_institutional_rows(api_json: dict | None) -> list[dict]:
+    """TWSE T86（欄位以 fields 名稱定位）→ daily_institutional 資料列。"""
+    if not api_json or api_json.get("stat") != "OK":
+        return []
+    date_raw = str(api_json.get("date", ""))
+    if len(date_raw) != 8:
+        return []
+    trade_date = f"{date_raw[:4]}-{date_raw[4:6]}-{date_raw[6:8]}"
+    index = {name: i for i, name in enumerate(api_json.get("fields") or [])}
+    code_i = index.get("證券代號")
+    total_i = index.get("三大法人買賣超股數")
+    if code_i is None or total_i is None:
+        return []
+    foreign_i = index.get("外陸資買賣超股數(不含外資自營商)")
+    trust_i = index.get("投信買賣超股數")
+    dealer_i = index.get("自營商買賣超股數")
+    rows = []
+    for raw in api_json.get("data", []):
+        stock_no = str(raw[code_i]).strip()
+        if not stock_no:
+            continue
+        rows.append(
+            {
+                "stock_no": stock_no,
+                "trade_date": trade_date,
+                "foreign_net": _num(raw[foreign_i]) if foreign_i is not None else None,
+                "trust_net": _num(raw[trust_i]) if trust_i is not None else None,
+                "dealer_net": _num(raw[dealer_i]) if dealer_i is not None else None,
+                "total_net": _num(raw[total_i]),
+            }
+        )
+    return rows
+
+
+def otc_institutional_rows(data: list[dict]) -> list[dict]:
+    """TPEx 三大法人買賣明細 → daily_institutional 資料列。"""
+    rows = []
+    for item in data or []:
+        stock_no = str(item.get("SecuritiesCompanyCode", "")).strip()
+        trade_date = roc_compact_to_iso(item.get("Date"))
+        if not stock_no or not trade_date:
+            continue
+        rows.append(
+            {
+                "stock_no": stock_no,
+                "trade_date": trade_date,
+                "foreign_net": _num(
+                    item.get("Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Difference")
+                ),
+                "trust_net": _num(item.get("SecuritiesInvestmentTrustCompanies-Difference")),
+                "dealer_net": _num(item.get("Dealers-Difference")),
+                "total_net": _num(item.get("TotalDifference")),
+            }
+        )
+    return rows
+
+
 # ---------- 除權息 ----------
 def listed_dividend_rows(data: list[dict]) -> list[dict]:
     """TWSE TWT48U_ALL 除權息預告 → dividend_events 資料列。"""
@@ -180,6 +241,21 @@ async def _collect(label: str, coroutine, mapper) -> list[dict]:
         return []
 
 
+async def _collect_listed_institutional(twse: TwseClient) -> list[dict]:
+    """T86 需帶日期；從台北今天往回試最多 4 天（假日/尚未公布會查無資料）。"""
+    today = datetime.now(_TAIPEI_TZ).date()
+    for offset in range(_T86_LOOKBACK_DAYS):
+        day = today - timedelta(days=offset)
+        try:
+            rows = listed_institutional_rows(await twse.fetch_listed_institutional(day.strftime("%Y%m%d")))
+        except httpx.HTTPError:
+            logger.warning("上市三大法人查詢失敗 date=%s", day, exc_info=True)
+            continue
+        if rows:
+            return rows
+    return []
+
+
 async def run_snapshot(db: SupabaseClient, twse: TwseClient) -> dict:
     """抓兩市場最新資料並 upsert；同日重跑等於覆寫，不會重複。"""
     close_rows = listed_close_rows(await twse.fetch_listed_quotes())
@@ -191,11 +267,23 @@ async def run_snapshot(db: SupabaseClient, twse: TwseClient) -> dict:
     )
     margin_rows += await _collect("上櫃融資融券", twse.fetch_otc_margins(), otc_margin_rows)
 
+    institutional_rows = await _collect_listed_institutional(twse)
+    institutional_rows += await _collect("上櫃三大法人", twse.fetch_otc_institutional(), otc_institutional_rows)
+
     dividend_rows = await _collect("上市除權息", twse.fetch_listed_dividends(), listed_dividend_rows)
     dividend_rows += await _collect("上櫃除權息", twse.fetch_otc_dividends(), otc_dividend_rows)
 
     closes = await _upsert(db, "daily_closes", "stock_no,trade_date", ("stock_no", "trade_date"), close_rows)
     margins = await _upsert(db, "daily_margins", "stock_no,trade_date", ("stock_no", "trade_date"), margin_rows)
+    institutional = await _upsert(
+        db, "daily_institutional", "stock_no,trade_date", ("stock_no", "trade_date"), institutional_rows
+    )
     dividends = await _upsert(db, "dividend_events", "stock_no,ex_date", ("stock_no", "ex_date"), dividend_rows)
     trade_dates = sorted({row["trade_date"] for row in close_rows})
-    return {"closes": closes, "margins": margins, "dividends": dividends, "trade_dates": trade_dates}
+    return {
+        "closes": closes,
+        "margins": margins,
+        "institutional": institutional,
+        "dividends": dividends,
+        "trade_dates": trade_dates,
+    }

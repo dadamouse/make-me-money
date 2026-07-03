@@ -16,11 +16,13 @@ LISTED_COMPANIES_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
 LISTED_MARGINS_URL = "https://openapi.twse.com.tw/v1/exchangeReport/MI_MARGN"
 LISTED_DIVIDENDS_URL = "https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL"
 LISTED_NEWS_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap04_L"
+LISTED_INSTITUTIONAL_URL = "https://www.twse.com.tw/rwd/zh/fund/T86"
 TPEX_COMPANIES_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TPEX_QUOTES_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
 TPEX_MARGINS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_margin_balance"
 TPEX_DIVIDENDS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_exright_prepost"
 TPEX_NEWS_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O"
+TPEX_INSTITUTIONAL_URL = "https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading"
 TPEX_STOCK_MONTH_URL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock"
 
 MARKET_TWSE = "上市"
@@ -129,6 +131,18 @@ class TwseClient:
 
     async def fetch_listed_news(self) -> list[dict]:
         return await self._get_json(LISTED_NEWS_URL)
+
+    async def fetch_listed_institutional(self, yyyymmdd: str) -> dict:
+        """TWSE T86 三大法人買賣超（指定日期，非交易日回 stat != OK）。"""
+        response = await self._http.get(
+            LISTED_INSTITUTIONAL_URL,
+            params={"date": yyyymmdd, "selectType": "ALLBUT0999", "response": "json"},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def fetch_otc_institutional(self) -> list[dict]:
+        return await self._get_json(TPEX_INSTITUTIONAL_URL)
 
     async def fetch_otc_news(self) -> list[dict]:
         return await self._get_json(TPEX_NEWS_URL)

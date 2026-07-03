@@ -2,9 +2,11 @@ from app.parser import roc_compact_to_iso
 from app.snapshot import (
     listed_close_rows,
     listed_dividend_rows,
+    listed_institutional_rows,
     listed_margin_rows,
     otc_close_rows,
     otc_dividend_rows,
+    otc_institutional_rows,
     otc_margin_rows,
 )
 
@@ -82,6 +84,51 @@ def test_otc_margin_rows():
     assert rows[0]["margin_change"] == 200.0
     assert rows[0]["short_change"] == -5.0
     assert rows[0]["trade_date"] == "2026-07-03"
+
+
+def test_listed_institutional_rows_uses_field_positions():
+    api = {
+        "stat": "OK",
+        "date": "20260702",
+        "fields": ["證券代號", "證券名稱", "外陸資買賣超股數(不含外資自營商)", "投信買賣超股數", "自營商買賣超股數", "三大法人買賣超股數"],
+        "data": [["2330", "台積電", "5,000,000", "1,000,000", "-500,000", "5,500,000"]],
+    }
+    assert listed_institutional_rows(api) == [
+        {
+            "stock_no": "2330",
+            "trade_date": "2026-07-02",
+            "foreign_net": 5000000.0,
+            "trust_net": 1000000.0,
+            "dealer_net": -500000.0,
+            "total_net": 5500000.0,
+        }
+    ]
+    assert listed_institutional_rows({"stat": "很抱歉，沒有符合條件的資料!"}) == []
+    assert listed_institutional_rows(None) == []
+
+
+def test_otc_institutional_rows():
+    data = [
+        {
+            "Date": "1150702",
+            "SecuritiesCompanyCode": "5274",
+            "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Difference": "200,000",
+            "SecuritiesInvestmentTrustCompanies-Difference": "-10,000",
+            "Dealers-Difference": "5,000",
+            "TotalDifference": "195,000",
+        }
+    ]
+    rows = otc_institutional_rows(data)
+    assert rows == [
+        {
+            "stock_no": "5274",
+            "trade_date": "2026-07-02",
+            "foreign_net": 200000.0,
+            "trust_net": -10000.0,
+            "dealer_net": 5000.0,
+            "total_net": 195000.0,
+        }
+    ]
 
 
 def test_listed_dividend_rows():

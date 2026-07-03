@@ -50,6 +50,7 @@ def stochastic_kd(rows: list[dict], period: int = KD_PERIOD) -> tuple[float | No
 def compute_indicators(rows: list[dict]) -> dict:
     closes = [r["close"] for r in rows if r.get("close") is not None]
     k, d = stochastic_kd(rows)
+    j = 3 * k - 2 * d if k is not None and d is not None else None
     return {
         "ma5": sma(closes, 5),
         "ma20": sma(closes, 20),
@@ -57,4 +58,5 @@ def compute_indicators(rows: list[dict]) -> dict:
         "rsi14": rsi(closes, 14),
         "k": k,
         "d": d,
+        "j": j,
     }

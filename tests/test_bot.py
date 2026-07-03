@@ -78,6 +78,24 @@ TPEX_NEWS = [
     {"SecuritiesCompanyCode": "5274", "CompanyName": "信驊", "主旨": "公告本公司取得美國專利"},
 ]
 
+LISTED_INSTITUTIONAL = {
+    "stat": "OK",
+    "date": "20260702",
+    "fields": ["證券代號", "證券名稱", "外陸資買賣超股數(不含外資自營商)", "投信買賣超股數", "自營商買賣超股數", "三大法人買賣超股數"],
+    "data": [["2330", "台積電", "5,000,000", "1,000,000", "-500,000", "5,500,000"]],
+}
+
+TPEX_INSTITUTIONAL = [
+    {
+        "Date": "1150702",
+        "SecuritiesCompanyCode": "5274",
+        "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Difference": "200,000",
+        "SecuritiesInvestmentTrustCompanies-Difference": "-10,000",
+        "Dealers-Difference": "5,000",
+        "TotalDifference": "195,000",
+    },
+]
+
 VOLUME_RANK = [
     {"stock_no": "3231", "trade_date": "2026-07-03", "close": 159.0, "prev_close": 158.5,
      "volume": 24768914.0, "prev_volume": 17411425.0},
@@ -102,6 +120,7 @@ class FakePostgrest:
             "stocks": [],
             "daily_closes": [],
             "daily_margins": [],
+            "daily_institutional": [],
             "dividend_events": [],
         }
         self._next_id = 1
@@ -173,6 +192,8 @@ class BotRuntime:
             if url.startswith("https://api.line.me/"):
                 self.replies.append(json.loads(request.content))
                 return httpx.Response(200, json={})
+            if url.startswith("https://www.twse.com.tw/rwd/zh/fund/T86"):
+                return httpx.Response(200, json=LISTED_INSTITUTIONAL)
             if url.startswith("https://www.twse.com.tw/"):
                 return httpx.Response(200, json=twse_response)
             if url.startswith("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"):
@@ -197,6 +218,8 @@ class BotRuntime:
                 return httpx.Response(200, json=TPEX_MARGINS)
             if url.startswith("https://www.tpex.org.tw/openapi/v1/tpex_exright_prepost"):
                 return httpx.Response(200, json=TPEX_DIVIDENDS)
+            if url.startswith("https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading"):
+                return httpx.Response(200, json=TPEX_INSTITUTIONAL)
             if "/rest/v1/rpc/volume_surge_ranking" in url:
                 return httpx.Response(200, json=VOLUME_RANK)
             if "/rest/v1/" in url:
@@ -386,9 +409,17 @@ def _seed_history(rt, stock_no, days=70):
         )
 
 
-def test_list_shows_technical_indicators_when_history_exists():
+def test_list_shows_indicators_institutional_and_margin():
     with BotRuntime() as rt:
         _seed_history(rt, "2330")
+        rt.postgrest.db["daily_margins"].append(
+            {"stock_no": "2330", "trade_date": "2026-07-02", "margin_balance": 25000,
+             "margin_change": 1000, "short_balance": 500, "short_change": -100}
+        )
+        rt.postgrest.db["daily_institutional"].append(
+            {"stock_no": "2330", "trade_date": "2026-07-02", "foreign_net": 5000000,
+             "trust_net": 1000000, "dealer_net": -500000, "total_net": 5500000}
+        )
         rt.send("登入dada")
         rt.send("新增2330 1000 850")
         rt.send("我的股票")
@@ -397,7 +428,9 @@ def test_list_shows_technical_indicators_when_history_exists():
         assert "MA20 " in content
         assert "MA60 " in content
         assert "RSI " in content
-        assert "K " in content
+        assert "／J " in content
+        assert "法人 +5,500 張（外資+5,000｜投信+1,000｜自營-500）" in content
+        assert "融資 25,000 張（+1,000）｜融券 500 張（-100）" in content
 
 
 def test_chart_command_returns_flex_with_served_image():
@@ -483,7 +516,12 @@ def test_daily_snapshot_stores_closes_margins_dividends():
         assert payload["stocks_synced"] == 7
         assert payload["closes"] == 6
         assert payload["margins"] == 2
+        assert payload["institutional"] == 2
         assert payload["dividends"] == 2
+
+        institutional = {(r["stock_no"], r["trade_date"]): r for r in rt.postgrest.db["daily_institutional"]}
+        assert institutional[("2330", "2026-07-02")]["total_net"] == 5500000.0
+        assert institutional[("5274", "2026-07-02")]["foreign_net"] == 200000.0
 
         closes = {(r["stock_no"], r["trade_date"]): r for r in rt.postgrest.db["daily_closes"]}
         assert closes[("2330", "2026-07-02")]["close"] == 2465.0

@@ -169,6 +169,14 @@ async def _handle_pick(deps: Deps, line_user_id: str, member: dict, cmd: Command
     return await _delete_holding(deps, member, stock, stock["stock_no"])
 
 
+def _latest_by_stock(rows: list[dict]) -> dict[str, dict]:
+    """rows 已依 trade_date 由新到舊排序，取每檔第一筆。"""
+    latest: dict[str, dict] = {}
+    for row in rows:
+        latest.setdefault(str(row["stock_no"]), row)
+    return latest
+
+
 async def _handle_list(deps: Deps, member: dict) -> str | dict:
     rows = await deps.db.get(f"holdings?member_id=eq.{member['id']}&select=stock_no,shares,cost_price")
     if not rows:
@@ -177,6 +185,13 @@ async def _handle_list(deps: Deps, member: dict) -> str | dict:
     codes = ",".join(quote(a["stock_no"]) for a in aggregated)
     stock_rows = await deps.db.get(f"stocks?stock_no=in.({codes})&{_STOCK_COLUMNS}")
     info_map = {s["stock_no"]: s for s in stock_rows}
+    recent_limit = len(aggregated) * 8
+    margin_map = _latest_by_stock(
+        await deps.db.get(f"daily_margins?stock_no=in.({codes})&order=trade_date.desc&limit={recent_limit}")
+    )
+    institutional_map = _latest_by_stock(
+        await deps.db.get(f"daily_institutional?stock_no=in.({codes})&order=trade_date.desc&limit={recent_limit}")
+    )
     entries = []
     for agg in aggregated:
         info = info_map.get(agg["stock_no"], {})
@@ -194,6 +209,8 @@ async def _handle_list(deps: Deps, member: dict) -> str | dict:
                 "market": info.get("market"),
                 "quote": await deps.twse.fetch_close(agg["stock_no"], info.get("market")),
                 "indicators": indicators,
+                "margin": margin_map.get(agg["stock_no"]),
+                "institutional": institutional_map.get(agg["stock_no"]),
             }
         )
     return build_portfolio_message(member["name"], entries)

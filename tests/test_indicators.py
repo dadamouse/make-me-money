@@ -54,11 +54,13 @@ def test_compute_indicators_full_and_partial():
     assert ind["ma60"] is not None
     assert ind["rsi14"] == 100.0
     assert ind["k"] is not None
+    assert ind["j"] == 3 * ind["k"] - 2 * ind["d"]
 
     short = compute_indicators(_rows([1.0, 2.0]))
     assert short["ma5"] is None
     assert short["rsi14"] is None
     assert short["k"] is None
+    assert short["j"] is None
 
 
 def test_parse_twse_month_rows():
