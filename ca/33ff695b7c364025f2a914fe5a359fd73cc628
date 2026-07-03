@@ -1,0 +1,36 @@
+app/flex.py
+  s_d4fdd612f940f8::t_b2ec4407585150 146-150
+  s_d4fdd612f940f8::t_12d64407b878b8 174-175
+  s_d4fdd612f940f8::t_2f812e6185acad 235,247-248
+app/deps.py
+  s_d4fdd612f940f8::t_e0cf8651085d12 17
+app/chart.py
+  s_d4fdd612f940f8::t_c417e78533bb7d 43-44,46
+tests/test_bot.py
+  s_d4fdd612f940f8::t_67bf163424d797 547-592
+  s_d4fdd612f940f8::t_43b8af64eb585c 12
+app/handlers.py
+  s_d4fdd612f940f8::t_a86e3213d4c566 178-183,186
+  s_d4fdd612f940f8::t_c8457dfa3b9053 219-226
+  s_d4fdd612f940f8::t_640d81d0a559c1 13
+app/webview.py
+  s_d4fdd612f940f8::t_46f5fab8fd00a4 1-130
+app/main.py
+  s_d4fdd612f940f8::t_d359c7c1dc1b48 1,5,10,12,15-16,18,23-25,44,67-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ca33ff695b7c364025f2a914fe5a359fd73cc628",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
