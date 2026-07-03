@@ -68,6 +68,15 @@ TPEX_DIVIDENDS = [
     },
 ]
 
+LISTED_NEWS = [
+    {"公司代號": "2330", "公司名稱": "台積電", "主旨 ": "公告本公司董事會決議發放現金股利"},
+    {"公司代號": "9999", "公司名稱": "無關公司", "主旨 ": "不該出現的訊息"},
+]
+
+TPEX_NEWS = [
+    {"SecuritiesCompanyCode": "5274", "CompanyName": "信驊", "主旨": "公告本公司取得美國專利"},
+]
+
 TWSE_OK = {
     "stat": "OK",
     "data": [["115/07/02", "1,000", "2,355,000", "2,350.00", "2,360.00", "2,340.00", "2,355.00", "+5.00", "100"]],
@@ -102,12 +111,17 @@ class FakePostgrest:
             elif value.startswith("like.") and value.endswith("*"):
                 prefix = value[5:-1]
                 filters.append(lambda row, k=key, p=prefix: str(row.get(k, "")).startswith(p))
+            elif value.startswith("gte."):
+                filters.append(lambda row, k=key, v=value[4:]: str(row.get(k, "")) >= v)
         match = lambda row: all(f(row) for f in filters)  # noqa: E731
 
         if method == "GET":
             results = [row for row in self.db[table] if match(row)]
             if params.get("order"):
-                results = sorted(results, key=lambda row: str(row.get(params.get("order"), "")))
+                field, _, direction = params.get("order").partition(".")
+                results = sorted(results, key=lambda row: str(row.get(field, "")), reverse=direction == "desc")
+            if params.get("limit"):
+                results = results[: int(params.get("limit"))]
             return results
         if method == "POST":
             conflict_keys = (params.get("on_conflict") or "").split(",") if params.get("on_conflict") else []
@@ -159,8 +173,14 @@ class BotRuntime:
                 return httpx.Response(200, json=LISTED_MARGINS)
             if url.startswith("https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL"):
                 return httpx.Response(200, json=LISTED_DIVIDENDS)
+            if url.startswith("https://openapi.twse.com.tw/v1/opendata/t187ap04_L"):
+                return httpx.Response(200, json=LISTED_NEWS)
             if url.startswith("https://openapi.twse.com.tw/"):
                 return httpx.Response(200, json=LISTED_COMPANIES)
+            if url.startswith("https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O"):
+                return httpx.Response(200, json=TPEX_NEWS)
+            if url.startswith("https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock"):
+                return httpx.Response(200, json={"tables": []})
             if url.startswith("https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"):
                 return httpx.Response(200, json=OTC_COMPANIES)
             if url.startswith("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"):
@@ -338,6 +358,59 @@ def test_pick_out_of_range_keeps_pending():
         assert "請輸入 1～2 之間的數字" in rt.last_reply()
         rt.send("2")
         assert "已為 dada 新增 元大台灣50反1（00632R・上市）" in rt.last_reply()
+
+
+def _seed_history(rt, stock_no, days=70):
+    for i in range(days):
+        close = 100.0 + i
+        rt.postgrest.db["daily_closes"].append(
+            {
+                "stock_no": stock_no,
+                "trade_date": f"2026-{4 + i // 30:02d}-{i % 30 + 1:02d}",
+                "close": close,
+                "high": close + 2,
+                "low": close - 2,
+                "volume": 1000,
+            }
+        )
+
+
+def test_list_shows_technical_indicators_when_history_exists():
+    with BotRuntime() as rt:
+        _seed_history(rt, "2330")
+        rt.send("登入dada")
+        rt.send("新增2330 1000 850")
+        rt.send("我的股票")
+        content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
+        assert "MA5 " in content
+        assert "MA20 " in content
+        assert "MA60 " in content
+        assert "RSI " in content
+        assert "K " in content
+
+
+def test_news_command_filters_by_holdings():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("新增2330")
+        rt.send("新增信驊")
+        rt.postgrest.db["dividend_events"].append(
+            {"stock_no": "2330", "ex_date": "2099-01-01", "kind": "息", "cash_dividend": 5.0}
+        )
+        rt.send("今日資訊")
+        reply = rt.last_reply()
+        assert "持股今日資訊" in reply
+        assert "2330 台積電：公告本公司董事會決議發放現金股利" in reply
+        assert "5274 信驊：公告本公司取得美國專利" in reply
+        assert "不該出現的訊息" not in reply
+        assert "2099-01-01 除息，現金股利 5 元" in reply
+
+
+def test_news_command_without_holdings():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("今日資訊")
+        assert "目前沒有任何持股" in rt.last_reply()
 
 
 def test_requires_login_and_shows_help():

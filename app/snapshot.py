@@ -28,26 +28,42 @@ def _diff(today: float | None, previous: float | None) -> float | None:
     return today - previous
 
 
-# ---------- 收盤價＋成交量 ----------
-def _to_close_row(code, date_compact, close_raw, volume_raw) -> dict | None:
+# ---------- 收盤價＋成交量＋最高最低 ----------
+def _to_close_row(code, date_compact, close_raw, volume_raw, high_raw, low_raw) -> dict | None:
     stock_no = str(code or "").strip()
     trade_date = roc_compact_to_iso(date_compact)
     close = _num(close_raw)
     if not stock_no or not trade_date or close is None:
         return None
-    return {"stock_no": stock_no, "trade_date": trade_date, "close": close, "volume": _num(volume_raw)}
+    return {
+        "stock_no": stock_no,
+        "trade_date": trade_date,
+        "close": close,
+        "volume": _num(volume_raw),
+        "high": _num(high_raw),
+        "low": _num(low_raw),
+    }
 
 
 def listed_close_rows(quotes: list[dict]) -> list[dict]:
     """TWSE STOCK_DAY_ALL → daily_closes 資料列。"""
-    rows = [_to_close_row(q.get("Code"), q.get("Date"), q.get("ClosingPrice"), q.get("TradeVolume")) for q in quotes or []]
+    rows = [
+        _to_close_row(
+            q.get("Code"), q.get("Date"), q.get("ClosingPrice"), q.get("TradeVolume"),
+            q.get("HighestPrice"), q.get("LowestPrice"),
+        )
+        for q in quotes or []
+    ]
     return [row for row in rows if row]
 
 
 def otc_close_rows(quotes: list[dict]) -> list[dict]:
     """TPEx 每日收盤行情 → daily_closes 資料列。"""
     rows = [
-        _to_close_row(q.get("SecuritiesCompanyCode"), q.get("Date"), q.get("Close"), q.get("TradingShares"))
+        _to_close_row(
+            q.get("SecuritiesCompanyCode"), q.get("Date"), q.get("Close"), q.get("TradingShares"),
+            q.get("High"), q.get("Low"),
+        )
         for q in quotes or []
     ]
     return [row for row in rows if row]

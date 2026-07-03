@@ -1,13 +1,21 @@
-"""指令處理：登入／切換／新增／刪除／清單。"""
+"""指令處理：登入／切換／新增／刪除／清單／今日資訊。"""
+import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 from .flex import build_portfolio_message
+from .history import get_price_history
+from .indicators import compute_indicators
 from .parser import HELP_TEXT, Command, aggregate_holdings, format_number
 from .pending import PendingChoices
 from .supabase import SupabaseClient
 from .twse import TwseClient
+
+logger = logging.getLogger(__name__)
+
+_TAIPEI_TZ = timezone(timedelta(hours=8))
+_NEWS_SUBJECT_MAX = 120
 
 _STOCK_NO_PATTERN = re.compile(r"\d{4,6}[A-Z]?")
 
@@ -169,6 +177,12 @@ async def _handle_list(db: SupabaseClient, twse: TwseClient, member: dict) -> st
     entries = []
     for agg in aggregated:
         info = info_map.get(agg["stock_no"], {})
+        indicators = None
+        try:
+            history = await get_price_history(db, twse, agg["stock_no"], info.get("market"))
+            indicators = compute_indicators(history)
+        except Exception:
+            logger.warning("技術指標計算失敗 stock_no=%s", agg["stock_no"], exc_info=True)
         entries.append(
             {
                 **agg,
@@ -176,9 +190,64 @@ async def _handle_list(db: SupabaseClient, twse: TwseClient, member: dict) -> st
                 "industry": info.get("industry"),
                 "market": info.get("market"),
                 "quote": await twse.fetch_close(agg["stock_no"], info.get("market")),
+                "indicators": indicators,
             }
         )
     return build_portfolio_message(member["name"], entries)
+
+
+def _news_subject(item: dict) -> str:
+    subject = str(item.get("主旨 ") or item.get("主旨") or "").strip().replace("\r\n", "")
+    return subject[:_NEWS_SUBJECT_MAX] + ("…" if len(subject) > _NEWS_SUBJECT_MAX else "")
+
+
+def _filter_news(items: list[dict], code_key: str, codes: set[str]) -> list[dict]:
+    return [item for item in items or [] if str(item.get(code_key, "")).strip() in codes]
+
+
+async def _handle_news(db: SupabaseClient, twse: TwseClient, member: dict) -> str:
+    rows = await db.get(f"holdings?member_id=eq.{member['id']}&select=stock_no")
+    if not rows:
+        return f"{member['name']} 目前沒有任何持股，輸入「新增2330」開始記錄。"
+    codes = {str(row["stock_no"]) for row in rows}
+    codes_query = ",".join(quote(code) for code in sorted(codes))
+    stock_rows = await db.get(f"stocks?stock_no=in.({codes_query})&select=stock_no,name")
+    name_map = {s["stock_no"]: s["name"] for s in stock_rows}
+
+    news: list[dict] = []
+    try:
+        news += _filter_news(await twse.fetch_listed_news(), "公司代號", codes)
+    except Exception:
+        logger.warning("上市重大訊息查詢失敗", exc_info=True)
+    try:
+        news += _filter_news(await twse.fetch_otc_news(), "SecuritiesCompanyCode", codes)
+    except Exception:
+        logger.warning("上櫃重大訊息查詢失敗", exc_info=True)
+
+    today = datetime.now(_TAIPEI_TZ).date().isoformat()
+    dividends = await db.get(
+        f"dividend_events?stock_no=in.({codes_query})&ex_date=gte.{today}&order=ex_date&limit=10"
+    )
+
+    lines = [f"📢 {member['name']} 持股今日資訊"]
+    lines.append("【重大訊息】")
+    if news:
+        for item in news:
+            code = str(item.get("公司代號") or item.get("SecuritiesCompanyCode") or "").strip()
+            lines.append(f"・{code} {name_map.get(code, '')}：{_news_subject(item)}")
+    else:
+        lines.append("今日無持股相關重大訊息")
+    lines.append("")
+    lines.append("【即將除權息】")
+    if dividends:
+        for event in dividends:
+            code = event["stock_no"]
+            cash = event.get("cash_dividend")
+            cash_text = f"，現金股利 {format_number(cash)} 元" if cash else ""
+            lines.append(f"・{code} {name_map.get(code, '')}：{event['ex_date']} 除{event.get('kind') or ''}{cash_text}")
+    else:
+        lines.append("近期無持股除權息")
+    return "\n".join(lines)
 
 
 async def handle_command(
@@ -207,4 +276,6 @@ async def handle_command(
         return await _handle_pick(db, pending, line_user_id, member, cmd)
     if cmd.action == "list":
         return await _handle_list(db, twse, member)
+    if cmd.action == "news":
+        return await _handle_news(db, twse, member)
     return HELP_TEXT

@@ -44,6 +44,8 @@ create table if not exists daily_closes (
   trade_date date not null,
   close numeric not null,
   volume numeric,                      -- 成交股數
+  high numeric,                        -- 當日最高（KD 計算用）
+  low numeric,                         -- 當日最低
   created_at timestamptz not null default now(),
   primary key (stock_no, trade_date)
 );

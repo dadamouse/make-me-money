@@ -11,7 +11,8 @@ HELP_TEXT = "\n".join(
         "新增2330 1000 850　記 1000 股、每股成本 850",
         "新增緯創　　　　　也可用公司簡稱",
         "刪除2330　　　　　刪除該檔所有紀錄",
-        "我的股票　　　　　列出持股與損益",
+        "我的股票　　　　　列出持股、損益與技術指標",
+        "今日資訊　　　　　持股的重大訊息與除權息提醒",
     ]
 )
 
@@ -47,6 +48,8 @@ def parse_command(raw_text: str | None) -> Command:
         return Command(action="remove", stock=m.group(1))
     if re.fullmatch(r"我的股票|清單|列表", text):
         return Command(action="list")
+    if re.fullmatch(r"今日資訊|重大訊息|新聞", text):
+        return Command(action="news")
     return Command(action="help")
 
 
@@ -87,6 +90,14 @@ def roc_compact_to_iso(compact: str | None) -> str | None:
     if len(s) < 7 or not s.isdigit():
         return None
     return f"{int(s[:-4]) + 1911}-{s[-4:-2]}-{s[-2:]}"
+
+
+def roc_slash_to_iso(roc_date: str | None) -> str | None:
+    """斜線民國日期 '115/07/01' → ISO '2026-07-01'。"""
+    parts = str(roc_date or "").strip().split("/")
+    if len(parts) != 3 or not all(p.isdigit() for p in parts):
+        return None
+    return f"{int(parts[0]) + 1911}-{parts[1]:0>2}-{parts[2]:0>2}"
 
 
 def parse_tpex_close(quotes: list | None, stock_no: str) -> dict | None:

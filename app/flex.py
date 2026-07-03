@@ -63,7 +63,29 @@ def _stock_block(item: dict) -> dict:
             )
     else:
         rows.append(_text(f"{market_prefix}觀察中（未記股數）", size="xs", color=MUTED_COLOR))
+    rows += _indicator_rows(item, quote["close"])
     return {"type": "box", "layout": "vertical", "spacing": "xs", "contents": rows}
+
+
+def _indicator_rows(item: dict, close: float) -> list[dict]:
+    """技術指標兩行：均線（含站上↑跌破↓）與 RSI/KD。資料不足的指標自動省略。"""
+    ind = item.get("indicators") or {}
+    rows = []
+    ma_parts = [
+        f"MA{n} {format_number(value)}{'↑' if close >= value else '↓'}"
+        for n, value in ((5, ind.get("ma5")), (20, ind.get("ma20")), (60, ind.get("ma60")))
+        if value is not None
+    ]
+    if ma_parts:
+        rows.append(_text("｜".join(ma_parts), size="xxs", color=MUTED_COLOR))
+    osc_parts = []
+    if ind.get("rsi14") is not None:
+        osc_parts.append(f"RSI {ind['rsi14']:.0f}")
+    if ind.get("k") is not None and ind.get("d") is not None:
+        osc_parts.append(f"K {ind['k']:.0f}／D {ind['d']:.0f}")
+    if osc_parts:
+        rows.append(_text("｜".join(osc_parts), size="xxs", color=MUTED_COLOR))
+    return rows
 
 
 def _header(member_name: str, date_label: str | None) -> dict:

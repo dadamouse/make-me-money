@@ -16,21 +16,35 @@ def test_roc_compact_to_iso():
     assert roc_compact_to_iso(None) is None
 
 
-def test_listed_close_rows_with_volume_and_skips_invalid():
+def test_listed_close_rows_with_volume_high_low_and_skips_invalid():
     quotes = [
-        {"Code": "2330", "Date": "1150702", "ClosingPrice": "2,465.00", "TradeVolume": "31,058,614"},
+        {
+            "Code": "2330", "Date": "1150702", "ClosingPrice": "2,465.00", "TradeVolume": "31,058,614",
+            "HighestPrice": "2,470.00", "LowestPrice": "2,390.00",
+        },
         {"Code": "9999", "Date": "1150702", "ClosingPrice": "--", "TradeVolume": "0"},
         {"Code": "", "Date": "1150702", "ClosingPrice": "10", "TradeVolume": "1"},
     ]
     assert listed_close_rows(quotes) == [
-        {"stock_no": "2330", "trade_date": "2026-07-02", "close": 2465.0, "volume": 31058614.0}
+        {
+            "stock_no": "2330", "trade_date": "2026-07-02", "close": 2465.0, "volume": 31058614.0,
+            "high": 2470.0, "low": 2390.0,
+        }
     ]
 
 
-def test_otc_close_rows_with_volume():
-    quotes = [{"Date": "1150702", "SecuritiesCompanyCode": "5274", "Close": "5000.00", "TradingShares": "216,609"}]
+def test_otc_close_rows_with_volume_high_low():
+    quotes = [
+        {
+            "Date": "1150702", "SecuritiesCompanyCode": "5274", "Close": "5000.00", "TradingShares": "216,609",
+            "High": "5,100.00", "Low": "4,900.00",
+        }
+    ]
     assert otc_close_rows(quotes) == [
-        {"stock_no": "5274", "trade_date": "2026-07-02", "close": 5000.0, "volume": 216609.0}
+        {
+            "stock_no": "5274", "trade_date": "2026-07-02", "close": 5000.0, "volume": 216609.0,
+            "high": 5100.0, "low": 4900.0,
+        }
     ]
 
 

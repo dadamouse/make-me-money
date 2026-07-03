@@ -15,10 +15,13 @@ STOCK_DAY_ALL_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL
 LISTED_COMPANIES_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
 LISTED_MARGINS_URL = "https://openapi.twse.com.tw/v1/exchangeReport/MI_MARGN"
 LISTED_DIVIDENDS_URL = "https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL"
+LISTED_NEWS_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap04_L"
 TPEX_COMPANIES_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TPEX_QUOTES_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
 TPEX_MARGINS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_margin_balance"
 TPEX_DIVIDENDS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_exright_prepost"
+TPEX_NEWS_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O"
+TPEX_STOCK_MONTH_URL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock"
 
 MARKET_TWSE = "上市"
 MARKET_TPEX = "上櫃"
@@ -123,6 +126,30 @@ class TwseClient:
 
     async def fetch_otc_dividends(self) -> list[dict]:
         return await self._get_json(TPEX_DIVIDENDS_URL)
+
+    async def fetch_listed_news(self) -> list[dict]:
+        return await self._get_json(LISTED_NEWS_URL)
+
+    async def fetch_otc_news(self) -> list[dict]:
+        return await self._get_json(TPEX_NEWS_URL)
+
+    async def fetch_listed_month(self, stock_no: str, year: int, month: int) -> dict:
+        """TWSE STOCK_DAY 單檔整月（含開高低收與成交量）。"""
+        response = await self._http.get(
+            STOCK_DAY_URL,
+            params={"response": "json", "date": f"{year}{month:02d}01", "stockNo": stock_no},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def fetch_otc_month(self, stock_no: str, year: int, month: int) -> dict:
+        """TPEx tradingStock 單檔整月。"""
+        response = await self._http.get(
+            TPEX_STOCK_MONTH_URL,
+            params={"code": stock_no, "date": f"{year}/{month:02d}/01", "response": "json"},
+        )
+        response.raise_for_status()
+        return response.json()
 
     async def _get_json(self, url: str) -> list[dict]:
         response = await self._http.get(url)
