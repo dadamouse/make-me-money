@@ -1,0 +1,131 @@
+"""純函式：指令解析、TWSE 回應解析、持股彙總與訊息格式化。"""
+import re
+from dataclasses import dataclass
+
+HELP_TEXT = "\n".join(
+    [
+        "📖 指令說明",
+        "登入dada　　　　　建立/綁定身份",
+        "切換媽媽　　　　　代操作家人帳戶",
+        "新增2330　　　　　加入觀察（不記股數）",
+        "新增2330 1000 850　記 1000 股、每股成本 850",
+        "新增緯創　　　　　也可用公司簡稱",
+        "刪除2330　　　　　刪除該檔所有紀錄",
+        "我的股票　　　　　列出持股與損益",
+    ]
+)
+
+_NUMBER = r"(\d+(?:\.\d+)?)"
+
+
+@dataclass(frozen=True)
+class Command:
+    action: str
+    name: str | None = None
+    stock: str | None = None
+    shares: float | None = None
+    cost: float | None = None
+
+
+def parse_command(raw_text: str | None) -> Command:
+    text = str(raw_text or "").strip()
+    if m := re.fullmatch(r"登入\s*(\S+)", text):
+        return Command(action="login", name=m.group(1))
+    if m := re.fullmatch(r"切換\s*(\S+)", text):
+        return Command(action="switch", name=m.group(1))
+    if m := re.fullmatch(rf"新增\s*(\S+?)(?:\s+{_NUMBER})?(?:\s+{_NUMBER})?", text):
+        return Command(
+            action="add",
+            stock=m.group(1),
+            shares=None if m.group(2) is None else float(m.group(2)),
+            cost=None if m.group(3) is None else float(m.group(3)),
+        )
+    if m := re.fullmatch(r"刪除\s*(\S+)", text):
+        return Command(action="remove", stock=m.group(1))
+    if re.fullmatch(r"我的股票|清單|列表", text):
+        return Command(action="list")
+    return Command(action="help")
+
+
+def parse_twse_close(api_json: dict | None) -> dict | None:
+    """TWSE STOCK_DAY 回應 → 最新收盤價。
+
+    data 每列：[日期(民國), 成交股數, 成交金額, 開盤, 最高, 最低, 收盤, 漲跌, 筆數]
+    """
+    if not api_json or api_json.get("stat") != "OK":
+        return None
+    rows = api_json.get("data")
+    if not isinstance(rows, list) or not rows:
+        return None
+    for row in reversed(rows):
+        try:
+            close = float(str(row[6]).replace(",", ""))
+        except (ValueError, IndexError):
+            continue
+        return {"date": str(row[0]), "close": close}
+    return None
+
+
+def format_roc_date(roc_date: str | None) -> str:
+    """民國日期 '115/07/02' → 顯示用 '07/02'。"""
+    parts = str(roc_date or "").split("/")
+    return f"{parts[1]}/{parts[2]}" if len(parts) == 3 else str(roc_date or "")
+
+
+def aggregate_holdings(rows: list[dict]) -> list[dict]:
+    """holdings 資料列（stock_no, shares, cost_price）→ 依代號彙總。"""
+    by_stock: dict[str, dict] = {}
+    for row in rows or []:
+        stock_no = str(row["stock_no"])
+        prev = by_stock.get(stock_no, {"stock_no": stock_no, "shares": 0.0, "cost": 0.0})
+        shares = float(row.get("shares") or 0)
+        cost_price = row.get("cost_price")
+        added_cost = shares * float(cost_price) if cost_price is not None and shares > 0 else 0.0
+        by_stock[stock_no] = {
+            "stock_no": stock_no,
+            "shares": prev["shares"] + shares,
+            "cost": prev["cost"] + added_cost,
+        }
+    return list(by_stock.values())
+
+
+def format_number(n: float) -> str:
+    """千分位、最多兩位小數、去除尾端零，如 2355000 → '2,355,000'、850.5 → '850.5'。"""
+    return f"{float(n):,.2f}".rstrip("0").rstrip(".")
+
+
+def format_portfolio(member_name: str, entries: list[dict]) -> str:
+    """entries: [{stock_no, name, shares, cost, quote: {date, close} | None}]"""
+    lines = [f"📊 {member_name} 的持股"]
+    total_value = 0.0
+    total_cost = 0.0
+    for entry in entries:
+        quote = entry.get("quote")
+        if not quote:
+            lines.append(f"{entry['stock_no']} {entry['name']}　⚠️ 查無報價（可能為上櫃或停牌）")
+            continue
+        lines.append(
+            f"{entry['stock_no']} {entry['name']}　收盤 {format_number(quote['close'])}（{format_roc_date(quote['date'])}）"
+        )
+        if entry["shares"] > 0:
+            value = entry["shares"] * quote["close"]
+            total_value += value
+            pnl_text = ""
+            if entry["cost"] > 0:
+                total_cost += entry["cost"]
+                pnl = value - entry["cost"]
+                pct = pnl / entry["cost"] * 100
+                sign = "+" if pnl >= 0 else ""
+                pnl_text = f"｜損益 {sign}{format_number(pnl)}（{sign}{pct:.1f}%）"
+            lines.append(f"　{format_number(entry['shares'])} 股｜市值 {format_number(value)}{pnl_text}")
+        else:
+            lines.append("　觀察中（未記股數）")
+    if total_value > 0:
+        lines.append("─────────")
+        total_line = f"總市值 {format_number(total_value)}"
+        if total_cost > 0:
+            pnl = total_value - total_cost
+            sign = "+" if pnl >= 0 else ""
+            total_line += f"｜總損益 {sign}{format_number(pnl)}"
+        lines.append(total_line)
+    return "\n".join(lines)
