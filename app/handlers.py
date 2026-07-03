@@ -220,6 +220,37 @@ async def _handle_chart(deps: Deps, line_user_id: str, cmd: Command) -> str | di
     return await _render_chart_reply(deps, stock)
 
 
+_VOLUME_RANK_MIN_SHARES = 1_000_000  # 過濾冷門股：今日至少 1,000 張
+_VOLUME_RANK_LIMIT = 10
+
+
+async def _handle_volume_rank(deps: Deps) -> str:
+    rows = await deps.db.rpc(
+        "volume_surge_ranking", {"min_volume": _VOLUME_RANK_MIN_SHARES, "limit_n": _VOLUME_RANK_LIMIT}
+    )
+    if not rows:
+        return "目前資料不足，還排不出量增排行（每個交易日收盤後更新）。"
+    codes_query = ",".join(quote(str(r["stock_no"])) for r in rows)
+    stock_rows = await deps.db.get(f"stocks?stock_no=in.({codes_query})&select=stock_no,name")
+    name_map = {s["stock_no"]: s["name"] for s in stock_rows}
+
+    latest_date = max(str(r["trade_date"]) for r in rows)
+    lines = [f"📈 量增排行（{latest_date[5:].replace('-', '/')}）"]
+    for i, row in enumerate(rows, start=1):
+        volume = float(row["volume"])
+        ratio = volume / float(row["prev_volume"])
+        close = float(row["close"])
+        prev_close = float(row["prev_close"]) if row.get("prev_close") else None
+        pct_text = ""
+        if prev_close:
+            pct = (close - prev_close) / prev_close * 100
+            pct_text = f"（{'+' if pct >= 0 else ''}{pct:.1f}%）"
+        name = name_map.get(str(row["stock_no"]), "")
+        lines.append(f"{i}. {row['stock_no']} {name}")
+        lines.append(f"　{format_number(volume / 1000)} 張・前日 ×{ratio:.1f}｜收 {format_number(close)}{pct_text}")
+    return "\n".join(lines)
+
+
 def _news_subject(item: dict) -> str:
     subject = str(item.get("主旨 ") or item.get("主旨") or "").strip().replace("\r\n", "")
     return subject[:_NEWS_SUBJECT_MAX] + ("…" if len(subject) > _NEWS_SUBJECT_MAX else "")
@@ -283,6 +314,8 @@ async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> 
         return await _handle_switch(deps, line_user_id, cmd.name)
     if cmd.action == "help":
         return HELP_TEXT
+    if cmd.action == "volume_rank":  # 全市場排行，不需身份
+        return await _handle_volume_rank(deps)
     member = await _get_acting_member(deps, line_user_id)
     if not member:
         return "👋 請先輸入「登入你的名字」開始使用，例如：登入dada"

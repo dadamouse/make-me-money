@@ -78,6 +78,13 @@ TPEX_NEWS = [
     {"SecuritiesCompanyCode": "5274", "CompanyName": "信驊", "主旨": "公告本公司取得美國專利"},
 ]
 
+VOLUME_RANK = [
+    {"stock_no": "3231", "trade_date": "2026-07-03", "close": 159.0, "prev_close": 158.5,
+     "volume": 24768914.0, "prev_volume": 17411425.0},
+    {"stock_no": "2330", "trade_date": "2026-07-03", "close": 2445.0, "prev_close": 2465.0,
+     "volume": 35919290.0, "prev_volume": 32905868.0},
+]
+
 TWSE_OK = {
     "stat": "OK",
     "data": [["115/07/02", "1,000", "2,355,000", "2,350.00", "2,360.00", "2,340.00", "2,355.00", "+5.00", "100"]],
@@ -190,6 +197,8 @@ class BotRuntime:
                 return httpx.Response(200, json=TPEX_MARGINS)
             if url.startswith("https://www.tpex.org.tw/openapi/v1/tpex_exright_prepost"):
                 return httpx.Response(200, json=TPEX_DIVIDENDS)
+            if "/rest/v1/rpc/volume_surge_ranking" in url:
+                return httpx.Response(200, json=VOLUME_RANK)
             if "/rest/v1/" in url:
                 table = url.split("/rest/v1/")[1].split("?")[0]
                 body = json.loads(request.content) if request.content else None
@@ -437,6 +446,17 @@ def test_news_command_without_holdings():
         rt.send("登入dada")
         rt.send("今日資訊")
         assert "目前沒有任何持股" in rt.last_reply()
+
+
+def test_volume_rank_command():
+    with BotRuntime() as rt:
+        rt.send("量增排行")  # 不需登入
+        reply = rt.last_reply()
+        assert "📈 量增排行（07/03）" in reply
+        assert "1. 3231 緯創" in reply
+        assert "24,768.91 張・前日 ×1.4｜收 159（+0.3%）" in reply
+        assert "2. 2330 台積電" in reply
+        assert "（-0.8%）" in reply
 
 
 def test_requires_login_and_shows_help():

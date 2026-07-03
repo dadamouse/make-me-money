@@ -39,3 +39,6 @@ class SupabaseClient:
 
     async def delete(self, path_and_query: str) -> list:
         return await self.request("DELETE", path_and_query)
+
+    async def rpc(self, function_name: str, args: dict) -> list:
+        return await self.request("POST", f"rpc/{function_name}", json_body=args)
