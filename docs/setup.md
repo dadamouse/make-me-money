@@ -1,6 +1,6 @@
 # 部署設定步驟
 
-架構：LINE → FastAPI（HF Space `dadamouse/stock`）→ Supabase ＋ TWSE API
+架構：LINE → FastAPI（HF Space `dadamouse/line-stock-bot`）→ Supabase ＋ TWSE API
 
 ## 1. Supabase 建表
 
@@ -12,7 +12,7 @@
 
 ## 2. HF Space Secrets
 
-到 HF Space `dadamouse/stock` 的 **Settings > Variables and secrets** 新增（全部設為 **Secret**）：
+到 HF Space `dadamouse/line-stock-bot` 的 **Settings > Variables and secrets** 新增（全部設為 **Secret**）：
 
 | 名稱 | 值 |
 |------|-----|
@@ -27,14 +27,14 @@
 
 ```bash
 # 第一次：加 remote（密碼用 HF access token，到 hf.co/settings/tokens 建立 write 權限的 token）
-git remote add space https://huggingface.co/spaces/dadamouse/stock
+git remote add space https://huggingface.co/spaces/dadamouse/line-stock-bot
 
 # 推送（Space 原有內容會被取代）
 git push --force space main
 ```
 
 推送後 Space 會自動 build Docker image 並啟動。到 Space 頁面確認狀態是 **Running**，
-開啟 `https://dadamouse-stock.hf.space/` 應回傳 `{"status":"ok","service":"line-stock-bot"}`。
+開啟 `https://dadamouse-line-stock-bot.hf.space/` 應回傳 `{"status":"ok","service":"line-stock-bot"}`。
 
 > 啟動時 server 會自動從 TWSE OpenAPI 同步上市公司對照表進 `stocks` 表
 > （所以「新增緯創」查得到 3231），每次重啟都會更新，不需手動維護。
@@ -43,7 +43,7 @@ git push --force space main
 
 到 [LINE Developers Console](https://developers.line.biz/console/) 的 Messaging API channel：
 
-1. **Webhook URL** 填入：`https://dadamouse-stock.hf.space/webhook/line`
+1. **Webhook URL** 填入：`https://dadamouse-line-stock-bot.hf.space/webhook/line`
 2. 開啟 **Use webhook**
 3. 按 **Verify**（應顯示 Success）
 4. 到 LINE Official Account Manager 關閉「自動回應訊息」，避免罐頭訊息干擾
@@ -66,7 +66,7 @@ git push --force space main
 安全性驗證（可選）：用 curl 送假簽章，應回 403、沒有 LINE 回覆、資料庫不變動：
 
 ```bash
-curl -s -X POST 'https://dadamouse-stock.hf.space/webhook/line' \
+curl -s -X POST 'https://dadamouse-line-stock-bot.hf.space/webhook/line' \
   -H 'Content-Type: application/json' \
   -H 'x-line-signature: bogus' \
   -d '{"events":[{"type":"message","replyToken":"x","source":{"userId":"U1"},"message":{"type":"text","text":"登入hacker"}}]}'

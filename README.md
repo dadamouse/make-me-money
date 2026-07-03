@@ -1,5 +1,5 @@
 ---
-title: Stock
+title: Line Stock Bot
 emoji: 📈
 colorFrom: green
 colorTo: indigo

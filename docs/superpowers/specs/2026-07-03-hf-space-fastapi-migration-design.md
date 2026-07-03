@@ -7,7 +7,7 @@
 ## 變更原因
 
 n8n workflow 以 JSON 匯出檔管理，程式碼審閱、版本控管、測試都不方便（使用者回饋「很難管控」）。
-改放 HF Space `dadamouse/stock`（Docker Space）後，程式碼直接進 git，`git push` 即部署。
+改放 HF Space `dadamouse/line-stock-bot`（Docker Space）後，程式碼直接進 git，`git push` 即部署。
 
 ## 決策
 
@@ -19,7 +19,7 @@ n8n workflow 以 JSON 匯出檔管理，程式碼審閱、版本控管、測試�
 ## 新架構
 
 ```
-家人 LINE ──▶ LINE Platform ──webhook──▶ FastAPI (dadamouse-stock.hf.space)
+家人 LINE ──▶ LINE Platform ──webhook──▶ FastAPI (dadamouse-line-stock-bot.hf.space)
                                            │ POST /webhook/line（HMAC 驗簽章）
                                 ┌──────────┼──────────┐
                                 ▼          ▼          ▼
@@ -48,4 +48,4 @@ n8n workflow 以 JSON 匯出檔管理，程式碼審閱、版本控管、測試�
 - 本 repo 即 Space repo：`git push --force space main`
 - Secrets 設在 Space Settings：`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、
   `LINE_CHANNEL_SECRET`、`LINE_CHANNEL_ACCESS_TOKEN`
-- Webhook URL：`https://dadamouse-stock.hf.space/webhook/line`
+- Webhook URL：`https://dadamouse-line-stock-bot.hf.space/webhook/line`
