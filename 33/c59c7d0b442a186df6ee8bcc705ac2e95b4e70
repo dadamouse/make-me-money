@@ -1,0 +1,23 @@
+README.md
+  s_d4fdd612f940f8::t_05c7f5ca059483 2
+docs/setup.md
+  s_d4fdd612f940f8::t_0564cf66a0e19a 3,15,30,37,46,69
+docs/superpowers/specs/2026-07-03-hf-space-fastapi-migration-design.md
+  s_d4fdd612f940f8::t_c0cd03544635d1 10,22,51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "33c59c7d0b442a186df6ee8bcc705ac2e95b4e70",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
