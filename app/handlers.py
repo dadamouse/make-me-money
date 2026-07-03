@@ -3,7 +3,8 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import quote
 
-from .parser import HELP_TEXT, Command, aggregate_holdings, format_number, format_portfolio
+from .flex import build_portfolio_message
+from .parser import HELP_TEXT, Command, aggregate_holdings, format_number
 from .supabase import SupabaseClient
 from .twse import TwseClient
 
@@ -103,7 +104,7 @@ async def _handle_remove(db: SupabaseClient, member: dict, stock_input: str) -> 
     return f"🗑 已刪除 {member['name']} 的 {label}，共 {len(deleted)} 筆。"
 
 
-async def _handle_list(db: SupabaseClient, twse: TwseClient, member: dict) -> str:
+async def _handle_list(db: SupabaseClient, twse: TwseClient, member: dict) -> str | dict:
     rows = await db.get(f"holdings?member_id=eq.{member['id']}&select=stock_no,shares,cost_price")
     if not rows:
         return f"{member['name']} 目前沒有任何持股，輸入「新增2330」開始記錄。"
@@ -119,10 +120,10 @@ async def _handle_list(db: SupabaseClient, twse: TwseClient, member: dict) -> st
         }
         for agg in aggregated
     ]
-    return format_portfolio(member["name"], entries)
+    return build_portfolio_message(member["name"], entries)
 
 
-async def handle_command(db: SupabaseClient, twse: TwseClient, line_user_id: str | None, cmd: Command) -> str:
+async def handle_command(db: SupabaseClient, twse: TwseClient, line_user_id: str | None, cmd: Command) -> str | dict:
     if not line_user_id:
         return HELP_TEXT
     if cmd.action == "login":

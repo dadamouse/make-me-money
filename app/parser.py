@@ -94,38 +94,55 @@ def format_number(n: float) -> str:
     return f"{float(n):,.2f}".rstrip("0").rstrip(".")
 
 
-def format_portfolio(member_name: str, entries: list[dict]) -> str:
-    """entries: [{stock_no, name, shares, cost, quote: {date, close} | None}]"""
-    lines = [f"📊 {member_name} 的持股"]
+def summarize_portfolio(entries: list[dict]) -> dict:
+    """entries: [{stock_no, name, shares, cost, quote: {date, close} | None}]
+    → 每檔補上 value/pnl/pct，並計算總市值、總成本、總損益（供文字版與 Flex 版共用）。
+    """
+    items = []
     total_value = 0.0
     total_cost = 0.0
     for entry in entries:
+        item = {**entry, "value": None, "pnl": None, "pct": None}
         quote = entry.get("quote")
-        if not quote:
-            lines.append(f"{entry['stock_no']} {entry['name']}　⚠️ 查無報價（可能為上櫃或停牌）")
-            continue
-        lines.append(
-            f"{entry['stock_no']} {entry['name']}　收盤 {format_number(quote['close'])}（{format_roc_date(quote['date'])}）"
-        )
-        if entry["shares"] > 0:
-            value = entry["shares"] * quote["close"]
-            total_value += value
-            pnl_text = ""
+        if quote and entry["shares"] > 0:
+            item["value"] = entry["shares"] * quote["close"]
+            total_value += item["value"]
             if entry["cost"] > 0:
                 total_cost += entry["cost"]
-                pnl = value - entry["cost"]
-                pct = pnl / entry["cost"] * 100
-                sign = "+" if pnl >= 0 else ""
-                pnl_text = f"｜損益 {sign}{format_number(pnl)}（{sign}{pct:.1f}%）"
-            lines.append(f"　{format_number(entry['shares'])} 股｜市值 {format_number(value)}{pnl_text}")
+                item["pnl"] = item["value"] - entry["cost"]
+                item["pct"] = item["pnl"] / entry["cost"] * 100
+        items.append(item)
+    total_pnl = total_value - total_cost if total_cost > 0 else None
+    return {"items": items, "total_value": total_value, "total_cost": total_cost, "total_pnl": total_pnl}
+
+
+def sign_of(value: float) -> str:
+    return "+" if value >= 0 else ""
+
+
+def format_portfolio(member_name: str, entries: list[dict]) -> str:
+    summary = summarize_portfolio(entries)
+    lines = [f"📊 {member_name} 的持股"]
+    for item in summary["items"]:
+        quote = item.get("quote")
+        if not quote:
+            lines.append(f"{item['stock_no']} {item['name']}　⚠️ 查無報價（可能為上櫃或停牌）")
+            continue
+        lines.append(
+            f"{item['stock_no']} {item['name']}　收盤 {format_number(quote['close'])}（{format_roc_date(quote['date'])}）"
+        )
+        if item["shares"] > 0:
+            pnl_text = ""
+            if item["pnl"] is not None:
+                sign = sign_of(item["pnl"])
+                pnl_text = f"｜損益 {sign}{format_number(item['pnl'])}（{sign}{item['pct']:.1f}%）"
+            lines.append(f"　{format_number(item['shares'])} 股｜市值 {format_number(item['value'])}{pnl_text}")
         else:
             lines.append("　觀察中（未記股數）")
-    if total_value > 0:
+    if summary["total_value"] > 0:
         lines.append("─────────")
-        total_line = f"總市值 {format_number(total_value)}"
-        if total_cost > 0:
-            pnl = total_value - total_cost
-            sign = "+" if pnl >= 0 else ""
-            total_line += f"｜總損益 {sign}{format_number(pnl)}"
+        total_line = f"總市值 {format_number(summary['total_value'])}"
+        if summary["total_pnl"] is not None:
+            total_line += f"｜總損益 {sign_of(summary['total_pnl'])}{format_number(summary['total_pnl'])}"
         lines.append(total_line)
     return "\n".join(lines)

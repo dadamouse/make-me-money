@@ -21,10 +21,15 @@ class LineClient:
         self._http = http
         self._access_token = access_token
 
-    async def reply(self, reply_token: str, text: str) -> None:
+    async def reply(self, reply_token: str, message: str | dict) -> None:
+        """message 為字串時包成 text message，為 dict 時視為完整 message 物件（如 Flex）。"""
+        if isinstance(message, str):
+            payload = {"type": "text", "text": message[:_MAX_TEXT_LENGTH]}
+        else:
+            payload = message
         response = await self._http.post(
             REPLY_URL,
             headers={"Authorization": f"Bearer {self._access_token}"},
-            json={"replyToken": reply_token, "messages": [{"type": "text", "text": str(text)[:_MAX_TEXT_LENGTH]}]},
+            json={"replyToken": reply_token, "messages": [payload]},
         )
         response.raise_for_status()

@@ -132,8 +132,15 @@ class BotRuntime:
             headers={"x-line-signature": signature, "content-type": "application/json"},
         )
 
+    def last_message(self) -> dict | None:
+        return self.replies[-1]["messages"][0] if self.replies else None
+
     def last_reply(self) -> str | None:
-        return self.replies[-1]["messages"][0]["text"] if self.replies else None
+        """text 訊息回內文；flex 訊息回 altText（沿用純文字版格式）。"""
+        message = self.last_message()
+        if not message:
+            return None
+        return message.get("text") or message.get("altText")
 
 
 def test_startup_syncs_stock_list():
@@ -162,6 +169,8 @@ def test_full_flow_login_add_list_switch_remove():
         assert "已為 dada 新增 緯創（3231）（觀察，未記股數）" in rt.last_reply()
 
         rt.send("我的股票")
+        assert rt.last_message()["type"] == "flex"
+        assert "2330 台積電" in json.dumps(rt.last_message()["contents"], ensure_ascii=False)
         listing = rt.last_reply()
         assert "📊 dada 的持股" in listing
         assert "2330 台積電　收盤 2,355（07/02）" in listing
