@@ -37,6 +37,7 @@ def _month_row(stock_no: str, raw: list, volume_unit: int) -> dict | None:
         "stock_no": stock_no,
         "trade_date": trade_date,
         "close": close,
+        "open": _num(raw[3]),
         "high": _num(raw[4]),
         "low": _num(raw[5]),
         "volume": volume * volume_unit if volume is not None else None,
@@ -65,10 +66,18 @@ def _sufficient(rows: list[dict]) -> bool:
 
 async def _read(db: SupabaseClient, stock_no: str) -> list[dict]:
     rows = await db.get(
-        f"daily_closes?stock_no=eq.{stock_no}&select=trade_date,close,high,low&order=trade_date.desc&limit={_READ_LIMIT}"
+        f"daily_closes?stock_no=eq.{stock_no}&select=trade_date,close,open,high,low,volume"
+        f"&order=trade_date.desc&limit={_READ_LIMIT}"
     )
     return [
-        {**row, "close": _num(row.get("close")), "high": _num(row.get("high")), "low": _num(row.get("low"))}
+        {
+            **row,
+            "close": _num(row.get("close")),
+            "open": _num(row.get("open")),
+            "high": _num(row.get("high")),
+            "low": _num(row.get("low")),
+            "volume": _num(row.get("volume")),
+        }
         for row in reversed(rows)
     ]
 

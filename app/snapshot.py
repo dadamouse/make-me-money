@@ -28,8 +28,8 @@ def _diff(today: float | None, previous: float | None) -> float | None:
     return today - previous
 
 
-# ---------- 收盤價＋成交量＋最高最低 ----------
-def _to_close_row(code, date_compact, close_raw, volume_raw, high_raw, low_raw) -> dict | None:
+# ---------- 收盤價＋成交量＋開高低 ----------
+def _to_close_row(code, date_compact, close_raw, volume_raw, open_raw, high_raw, low_raw) -> dict | None:
     stock_no = str(code or "").strip()
     trade_date = roc_compact_to_iso(date_compact)
     close = _num(close_raw)
@@ -40,6 +40,7 @@ def _to_close_row(code, date_compact, close_raw, volume_raw, high_raw, low_raw) 
         "trade_date": trade_date,
         "close": close,
         "volume": _num(volume_raw),
+        "open": _num(open_raw),
         "high": _num(high_raw),
         "low": _num(low_raw),
     }
@@ -50,7 +51,7 @@ def listed_close_rows(quotes: list[dict]) -> list[dict]:
     rows = [
         _to_close_row(
             q.get("Code"), q.get("Date"), q.get("ClosingPrice"), q.get("TradeVolume"),
-            q.get("HighestPrice"), q.get("LowestPrice"),
+            q.get("OpeningPrice"), q.get("HighestPrice"), q.get("LowestPrice"),
         )
         for q in quotes or []
     ]
@@ -62,7 +63,7 @@ def otc_close_rows(quotes: list[dict]) -> list[dict]:
     rows = [
         _to_close_row(
             q.get("SecuritiesCompanyCode"), q.get("Date"), q.get("Close"), q.get("TradingShares"),
-            q.get("High"), q.get("Low"),
+            q.get("Open"), q.get("High"), q.get("Low"),
         )
         for q in quotes or []
     ]

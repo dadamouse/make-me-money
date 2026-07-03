@@ -140,6 +140,27 @@ def _industry_sections(items: list[dict]) -> list[dict]:
     return blocks
 
 
+def build_chart_message(stock: dict, image_url: str, close: float | None, indicators: dict | None) -> dict:
+    """K 線圖卡片：hero 放圖、body 放收盤價與技術指標摘要。"""
+    title = f"{stock['stock_no']} {stock['name']}"
+    market = f"・{stock['market']}" if stock.get("market") else ""
+    body_rows = [
+        _row(
+            _text(f"{title}{market}", size="sm", weight="bold", color=TITLE_COLOR, flex=6, wrap=True),
+            _text(format_number(close) if close is not None else "-", size="sm", align="end", color=TITLE_COLOR, flex=3),
+        )
+    ]
+    if close is not None:
+        body_rows += _indicator_rows({"indicators": indicators}, close)
+    bubble = {
+        "type": "bubble",
+        "size": "giga",
+        "hero": {"type": "image", "url": image_url, "size": "full", "aspectRatio": "16:11", "aspectMode": "fit"},
+        "body": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": body_rows},
+    }
+    return {"type": "flex", "altText": f"{title} K線圖", "contents": bubble}
+
+
 def build_portfolio_message(member_name: str, entries: list[dict]) -> dict:
     """組出「我的股票」的 Flex Message；altText 沿用純文字版（通知列預覽用）。"""
     summary = summarize_portfolio(entries)

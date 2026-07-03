@@ -72,6 +72,7 @@ def test_parse_twse_month_rows():
             "stock_no": "2330",
             "trade_date": "2026-07-01",
             "close": 2465.0,
+            "open": 2400.0,
             "high": 2470.0,
             "low": 2390.0,
             "volume": 31058614.0,

@@ -16,6 +16,7 @@ SETTINGS = Settings(
     line_channel_secret="channel-secret",
     line_channel_access_token="access-token",
     cron_secret="cron-secret",
+    base_url="http://testserver",
 )
 
 LISTED_COMPANIES = [
@@ -368,6 +369,7 @@ def _seed_history(rt, stock_no, days=70):
                 "stock_no": stock_no,
                 "trade_date": f"2026-{4 + i // 30:02d}-{i % 30 + 1:02d}",
                 "close": close,
+                "open": close - 1,
                 "high": close + 2,
                 "low": close - 2,
                 "volume": 1000,
@@ -387,6 +389,30 @@ def test_list_shows_technical_indicators_when_history_exists():
         assert "MA60 " in content
         assert "RSI " in content
         assert "K " in content
+
+
+def test_chart_command_returns_flex_with_served_image():
+    with BotRuntime() as rt:
+        _seed_history(rt, "2330")
+        rt.send("登入dada")
+        rt.send("線圖2330")
+        message = rt.last_message()
+        assert message["type"] == "flex"
+        assert "2330 台積電 K線圖" in message["altText"]
+        hero_url = message["contents"]["hero"]["url"]
+        assert hero_url.startswith("http://testserver/charts/")
+        image = rt.client.get(hero_url.replace("http://testserver", ""))
+        assert image.status_code == 200
+        assert image.content[:8] == b"\x89PNG\r\n\x1a\n"
+        content = json.dumps(message["contents"], ensure_ascii=False)
+        assert "MA20 " in content
+
+
+def test_chart_command_with_insufficient_history():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("線圖3231")  # 只有 mock 的單日資料，回補也只拿到 1 筆
+        assert "歷史資料不足" in rt.last_reply()
 
 
 def test_news_command_filters_by_holdings():
