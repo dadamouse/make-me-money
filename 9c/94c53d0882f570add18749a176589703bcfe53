@@ -1,0 +1,22 @@
+app/parser.py
+  s_d4fdd612f940f8::t_8b28cb1d753506 54
+  s_d4fdd612f940f8::t_f3239d084349e8 16
+tests/test_pending.py
+  s_d4fdd612f940f8::t_24e9abc63be99c 5-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9c94c53d0882f570add18749a176589703bcfe53",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
