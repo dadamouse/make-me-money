@@ -8,6 +8,8 @@ MUTED_COLOR = "#9E9E9E"
 VALUE_COLOR = "#555555"
 HEADER_BG = "#27346A"
 HEADER_SUB_COLOR = "#B8C4E0"
+INDUSTRY_COLOR = "#5C6BC0"
+FALLBACK_INDUSTRY = "其他"
 _ALT_TEXT_MAX = 400  # LINE altText 上限
 
 
@@ -94,14 +96,28 @@ def _footer(summary: dict) -> dict:
     return {"type": "box", "layout": "vertical", "spacing": "sm", "paddingAll": "16px", "contents": rows}
 
 
+def _industry_sections(items: list[dict]) -> list[dict]:
+    """依產業別分組，各組加上產業標籤；「其他」排最後。"""
+    groups: dict[str, list[dict]] = {}
+    for item in items:
+        groups.setdefault(item.get("industry") or FALLBACK_INDUSTRY, []).append(item)
+    ordered = sorted(groups.items(), key=lambda kv: (kv[0] == FALLBACK_INDUSTRY, kv[0]))
+    blocks = []
+    for group_index, (industry, group_items) in enumerate(ordered):
+        blocks.append(
+            _text(industry, size="xs", weight="bold", color=INDUSTRY_COLOR, margin="lg" if group_index > 0 else "none")
+        )
+        for i, item in enumerate(group_items):
+            if i > 0:
+                blocks.append({"type": "separator"})
+            blocks.append(_stock_block(item))
+    return blocks
+
+
 def build_portfolio_message(member_name: str, entries: list[dict]) -> dict:
     """組出「我的股票」的 Flex Message；altText 沿用純文字版（通知列預覽用）。"""
     summary = summarize_portfolio(entries)
-    blocks = []
-    for i, item in enumerate(summary["items"]):
-        if i > 0:
-            blocks.append({"type": "separator"})
-        blocks.append(_stock_block(item))
+    blocks = _industry_sections(summary["items"])
     first_quote = next((item["quote"] for item in summary["items"] if item.get("quote")), None)
     bubble = {
         "type": "bubble",

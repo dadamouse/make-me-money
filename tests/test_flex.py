@@ -2,8 +2,14 @@ import json
 
 from app.flex import GAIN_COLOR, LOSS_COLOR, build_portfolio_message
 
-TSMC = {"stock_no": "2330", "name": "台積電", "shares": 1000, "cost": 850000, "quote": {"date": "115/07/02", "close": 2355}}
-WISTRON_WATCHING = {"stock_no": "3231", "name": "緯創", "shares": 0, "cost": 0, "quote": {"date": "115/07/02", "close": 100}}
+TSMC = {
+    "stock_no": "2330", "name": "台積電", "industry": "半導體",
+    "shares": 1000, "cost": 850000, "quote": {"date": "115/07/02", "close": 2355},
+}
+WISTRON_WATCHING = {
+    "stock_no": "3231", "name": "緯創", "industry": "電腦及週邊設備",
+    "shares": 0, "cost": 0, "quote": {"date": "115/07/02", "close": 100},
+}
 NO_QUOTE = {"stock_no": "6488", "name": "環球晶", "shares": 100, "cost": 0, "quote": None}
 
 
@@ -24,6 +30,13 @@ def test_flex_message_structure_and_content():
     assert "+1,505,000（+177.1%）" in content
     assert "觀察中（未記股數）" in content
     assert "總市值" in content
+    assert "半導體" in content
+    assert "電腦及週邊設備" in content
+
+
+def test_flex_unknown_industry_grouped_as_fallback():
+    message = build_portfolio_message("dada", [NO_QUOTE])
+    assert "其他" in dump(message)
 
 
 def test_flex_gain_is_red_loss_is_green():

@@ -18,8 +18,8 @@ SETTINGS = Settings(
 )
 
 LISTED_COMPANIES = [
-    {"公司代號": "2330", "公司簡稱": "台積電"},
-    {"公司代號": "3231", "公司簡稱": "緯創"},
+    {"公司代號": "2330", "公司簡稱": "台積電", "產業別": "24"},
+    {"公司代號": "3231", "公司簡稱": "緯創", "產業別": "25"},
 ]
 
 TWSE_OK = {
@@ -143,9 +143,12 @@ class BotRuntime:
         return message.get("text") or message.get("altText")
 
 
-def test_startup_syncs_stock_list():
+def test_startup_syncs_stock_list_with_industry():
     with BotRuntime() as rt:
-        assert {s["stock_no"] for s in rt.postgrest.db["stocks"]} == {"2330", "3231"}
+        stocks = {s["stock_no"]: s for s in rt.postgrest.db["stocks"]}
+        assert set(stocks) == {"2330", "3231"}
+        assert stocks["2330"]["industry"] == "半導體"
+        assert stocks["3231"]["industry"] == "電腦及週邊設備"
 
 
 def test_invalid_signature_is_rejected_without_reply():
@@ -170,7 +173,10 @@ def test_full_flow_login_add_list_switch_remove():
 
         rt.send("我的股票")
         assert rt.last_message()["type"] == "flex"
-        assert "2330 台積電" in json.dumps(rt.last_message()["contents"], ensure_ascii=False)
+        flex_content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
+        assert "2330 台積電" in flex_content
+        assert "半導體" in flex_content
+        assert "電腦及週邊設備" in flex_content
         listing = rt.last_reply()
         assert "📊 dada 的持股" in listing
         assert "2330 台積電　收盤 2,355（07/02）" in listing

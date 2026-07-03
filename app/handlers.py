@@ -110,12 +110,13 @@ async def _handle_list(db: SupabaseClient, twse: TwseClient, member: dict) -> st
         return f"{member['name']} 目前沒有任何持股，輸入「新增2330」開始記錄。"
     aggregated = aggregate_holdings(rows)
     codes = ",".join(quote(a["stock_no"]) for a in aggregated)
-    stock_rows = await db.get(f"stocks?stock_no=in.({codes})&select=stock_no,name")
-    name_map = {s["stock_no"]: s["name"] for s in stock_rows}
+    stock_rows = await db.get(f"stocks?stock_no=in.({codes})&select=stock_no,name,industry")
+    info_map = {s["stock_no"]: s for s in stock_rows}
     entries = [
         {
             **agg,
-            "name": name_map.get(agg["stock_no"], agg["stock_no"]),
+            "name": info_map.get(agg["stock_no"], {}).get("name", agg["stock_no"]),
+            "industry": info_map.get(agg["stock_no"], {}).get("industry"),
             "quote": await twse.fetch_close(agg["stock_no"]),
         }
         for agg in aggregated
