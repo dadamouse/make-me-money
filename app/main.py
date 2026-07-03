@@ -1,4 +1,5 @@
-"""FastAPI 入口：LINE webhook、健康檢查、啟動時同步股票對照表。"""
+"""FastAPI 入口：LINE webhook、健康檢查、每日快照端點、啟動時同步股票對照表。"""
+import hmac
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -10,6 +11,7 @@ from .config import Settings, load_settings
 from .handlers import handle_command
 from .line_client import LineClient, verify_signature
 from .parser import parse_command
+from .snapshot import snapshot_daily_closes
 from .supabase import SupabaseClient
 from .twse import TwseClient, sync_stocks
 
@@ -39,6 +41,18 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
     @app.get("/")
     async def health() -> dict:
         return {"status": "ok", "service": "line-stock-bot"}
+
+    @app.post("/admin/daily-snapshot")
+    async def daily_snapshot(request: Request) -> dict:
+        """由 Supabase pg_cron 每日收盤後呼叫：更新對照表＋寫入全市場收盤快照。"""
+        secret = request.app.state.settings.cron_secret
+        provided = request.headers.get("x-cron-secret", "")
+        if not secret or not hmac.compare_digest(secret, provided):
+            raise HTTPException(status_code=403, detail="invalid cron secret")
+        stocks_synced = await sync_stocks(request.app.state.db, request.app.state.twse)
+        result = await snapshot_daily_closes(request.app.state.db, request.app.state.twse)
+        logger.info("每日快照完成 stocks=%s closes=%s dates=%s", stocks_synced, result["rows"], result["trade_dates"])
+        return {"ok": True, "stocks_synced": stocks_synced, **result}
 
     @app.post("/webhook/line")
     async def line_webhook(request: Request) -> dict:

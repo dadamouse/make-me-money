@@ -15,6 +15,7 @@ SETTINGS = Settings(
     supabase_service_role_key="service-key",
     line_channel_secret="channel-secret",
     line_channel_access_token="access-token",
+    cron_secret="cron-secret",
 )
 
 LISTED_COMPANIES = [
@@ -32,8 +33,8 @@ TPEX_QUOTES = [
 ]
 
 LISTED_QUOTES_ALL = [
-    {"Code": "0050", "Name": "元大台灣50", "ClosingPrice": "108.80"},
-    {"Code": "2330", "Name": "台積電", "ClosingPrice": "2465.00"},
+    {"Code": "0050", "Name": "元大台灣50", "Date": "1150702", "ClosingPrice": "108.80"},
+    {"Code": "2330", "Name": "台積電", "Date": "1150702", "ClosingPrice": "2465.00"},
 ]
 
 TWSE_OK = {
@@ -46,7 +47,7 @@ class FakePostgrest:
     """記憶體版 PostgREST：支援本專案用到的 eq / in / on_conflict 語法。"""
 
     def __init__(self):
-        self.db = {"members": [], "line_bindings": [], "holdings": [], "stocks": []}
+        self.db = {"members": [], "line_bindings": [], "holdings": [], "stocks": [], "daily_closes": []}
         self._next_id = 1
 
     def handle(self, method: str, table: str, params: httpx.QueryParams, body):
@@ -64,12 +65,14 @@ class FakePostgrest:
         if method == "GET":
             return [row for row in self.db[table] if match(row)]
         if method == "POST":
-            conflict_key = params.get("on_conflict")
+            conflict_keys = (params.get("on_conflict") or "").split(",") if params.get("on_conflict") else []
             results = []
             for item in body if isinstance(body, list) else [body]:
                 existing = None
-                if conflict_key:
-                    existing = next((r for r in self.db[table] if r.get(conflict_key) == item.get(conflict_key)), None)
+                if conflict_keys:
+                    existing = next(
+                        (r for r in self.db[table] if all(r.get(k) == item.get(k) for k in conflict_keys)), None
+                    )
                 if existing:
                     existing.update(item)
                     results.append(existing)
@@ -251,6 +254,30 @@ def test_requires_login_and_shows_help():
         assert "請先輸入「登入你的名字」" in rt.last_reply()
         rt.send("哈囉")
         assert "指令說明" in rt.last_reply()
+
+
+def test_daily_snapshot_requires_secret():
+    with BotRuntime() as rt:
+        response = rt.client.post("/admin/daily-snapshot", headers={"x-cron-secret": "wrong"})
+        assert response.status_code == 403
+        assert rt.postgrest.db["daily_closes"] == []
+
+
+def test_daily_snapshot_stores_both_markets_and_is_idempotent():
+    with BotRuntime() as rt:
+        response = rt.client.post("/admin/daily-snapshot", headers={"x-cron-secret": "cron-secret"})
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["ok"] is True
+        assert payload["stocks_synced"] == 5
+        closes = {(r["stock_no"], r["trade_date"]): r["close"] for r in rt.postgrest.db["daily_closes"]}
+        assert closes[("2330", "2026-07-02")] == 2465.0
+        assert closes[("0050", "2026-07-02")] == 108.8
+        assert closes[("5274", "2026-07-02")] == 5000.0
+        assert closes[("006201", "2026-07-02")] == 49.3
+        # 重跑同一天：筆數不變（upsert）
+        rt.client.post("/admin/daily-snapshot", headers={"x-cron-secret": "cron-secret"})
+        assert len(rt.postgrest.db["daily_closes"]) == len(closes)
 
 
 def test_missing_quote_shows_warning():

@@ -16,6 +16,7 @@ class Settings:
     supabase_service_role_key: str
     line_channel_secret: str
     line_channel_access_token: str
+    cron_secret: str = ""  # 選用：每日快照端點的驗證 token，未設定則端點停用
 
 
 def load_settings() -> Settings:
@@ -27,4 +28,5 @@ def load_settings() -> Settings:
         supabase_service_role_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
         line_channel_secret=os.environ["LINE_CHANNEL_SECRET"],
         line_channel_access_token=os.environ["LINE_CHANNEL_ACCESS_TOKEN"],
+        cron_secret=os.environ.get("CRON_SECRET", ""),
     )

@@ -78,6 +78,14 @@ def format_roc_compact(compact: str | None) -> str:
     return f"{s[:-4]}/{s[-4:-2]}/{s[-2:]}" if len(s) >= 7 else s
 
 
+def roc_compact_to_iso(compact: str | None) -> str | None:
+    """緊湊民國日期 '1150702' → ISO '2026-07-02'。"""
+    s = str(compact or "").strip()
+    if len(s) < 7 or not s.isdigit():
+        return None
+    return f"{int(s[:-4]) + 1911}-{s[-4:-2]}-{s[-2:]}"
+
+
 def parse_tpex_close(quotes: list | None, stock_no: str) -> dict | None:
     """TPEx 每日收盤行情（全市場清單）→ 指定代號的收盤價。"""
     for quote in quotes or []:

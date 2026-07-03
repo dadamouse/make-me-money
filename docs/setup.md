@@ -72,6 +72,21 @@ curl -s -X POST 'https://dadamouse-line-stock-bot.hf.space/webhook/line' \
   -d '{"events":[{"type":"message","replyToken":"x","source":{"userId":"U1"},"message":{"type":"text","text":"登入hacker"}}]}'
 ```
 
+## 每日收盤快照（選用）
+
+每個交易日收盤後自動把**全市場**（上市＋上櫃＋ETF 約 2,600 檔）收盤價存進 `daily_closes` 表，
+並順便更新股票對照表。排程用 Supabase 內建 pg_cron，不需額外服務，也順便每天喚醒 Space。
+
+1. SQL Editor 執行 [`supabase/migrations/20260703_daily_closes.sql`](../supabase/migrations/20260703_daily_closes.sql) 建表
+2. 產生一組隨機字串當 token（如 `openssl rand -hex 16`），設到 HF Space Secret：`CRON_SECRET`
+3. 把 [`supabase/cron.sql`](../supabase/cron.sql) 裡的 `YOUR_CRON_SECRET` 換成同一個值後，在 SQL Editor 執行
+4. 驗證：手動觸發一次應回傳筆數
+   ```bash
+   curl -s -X POST 'https://dadamouse-line-stock-bot.hf.space/admin/daily-snapshot' -H 'x-cron-secret: 你的CRON_SECRET'
+   ```
+
+容量估算：每天約 2,600 列，一年約 65 萬列（粗估 <100 MB），Supabase 免費 500 MB 可存 2～3 年。
+
 ## 開發
 
 ```bash

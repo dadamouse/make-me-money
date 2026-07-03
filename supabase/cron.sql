@@ -1,0 +1,36 @@
+-- 每日收盤快照排程（Supabase pg_cron ＋ pg_net）
+-- ⚠️ 執行前把下面兩處 YOUR_CRON_SECRET 換成你設在 HF Space 的 CRON_SECRET 值
+-- pg_cron 使用 UTC：06:30 UTC = 台北 14:30（收盤後）
+
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+-- 主要排程：週一到週五 14:30（台北）
+select cron.schedule(
+  'daily-stock-snapshot',
+  '30 6 * * 1-5',
+  $$
+  select net.http_post(
+    url := 'https://dadamouse-line-stock-bot.hf.space/admin/daily-snapshot',
+    headers := '{"x-cron-secret": "YOUR_CRON_SECRET"}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+  $$
+);
+
+-- 備援排程：14:40 再打一次（若 Space 剛從休眠喚醒導致第一次失敗；upsert 重跑無副作用）
+select cron.schedule(
+  'daily-stock-snapshot-retry',
+  '40 6 * * 1-5',
+  $$
+  select net.http_post(
+    url := 'https://dadamouse-line-stock-bot.hf.space/admin/daily-snapshot',
+    headers := '{"x-cron-secret": "YOUR_CRON_SECRET"}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+  $$
+);
+
+-- 查看排程：select * from cron.job;
+-- 查看執行紀錄：select * from cron.job_run_details order by start_time desc limit 10;
+-- 取消排程：select cron.unschedule('daily-stock-snapshot');

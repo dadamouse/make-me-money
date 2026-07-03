@@ -38,5 +38,16 @@ create table if not exists stocks (
 
 create index if not exists idx_stocks_name on stocks (name);
 
+-- 每日收盤快照（pg_cron 觸發 /admin/daily-snapshot 寫入，見 cron.sql）
+create table if not exists daily_closes (
+  stock_no text not null,
+  trade_date date not null,
+  close numeric not null,
+  created_at timestamptz not null default now(),
+  primary key (stock_no, trade_date)
+);
+
+create index if not exists idx_daily_closes_date on daily_closes (trade_date);
+
 -- RLS：僅由 server 以 service_role key 存取（service_role 會繞過 RLS），
 -- 若 Supabase 提示 Enable automatic RLS 可直接開啟，不影響 bot 運作。
