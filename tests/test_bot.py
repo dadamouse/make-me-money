@@ -34,6 +34,8 @@ TPEX_QUOTES = [
 
 LISTED_QUOTES_ALL = [
     {"Code": "0050", "Name": "元大台灣50", "Date": "1150702", "ClosingPrice": "108.80"},
+    {"Code": "00631L", "Name": "元大台灣50正2", "Date": "1150702", "ClosingPrice": "38.88"},
+    {"Code": "00632R", "Name": "元大台灣50反1", "Date": "1150702", "ClosingPrice": "3.55"},
     {"Code": "2330", "Name": "台積電", "Date": "1150702", "ClosingPrice": "2465.00"},
 ]
 
@@ -53,17 +55,23 @@ class FakePostgrest:
     def handle(self, method: str, table: str, params: httpx.QueryParams, body):
         filters = []
         for key, value in params.multi_items():
-            if key in ("select", "on_conflict"):
+            if key in ("select", "on_conflict", "order", "limit"):
                 continue
             if value.startswith("eq."):
                 filters.append(lambda row, k=key, v=value[3:]: str(row.get(k)) == v)
             elif value.startswith("in.(") and value.endswith(")"):
                 allowed = value[4:-1].split(",")
                 filters.append(lambda row, k=key, a=allowed: str(row.get(k)) in a)
+            elif value.startswith("like.") and value.endswith("*"):
+                prefix = value[5:-1]
+                filters.append(lambda row, k=key, p=prefix: str(row.get(k, "")).startswith(p))
         match = lambda row: all(f(row) for f in filters)  # noqa: E731
 
         if method == "GET":
-            return [row for row in self.db[table] if match(row)]
+            results = [row for row in self.db[table] if match(row)]
+            if params.get("order"):
+                results = sorted(results, key=lambda row: str(row.get(params.get("order"), "")))
+            return results
         if method == "POST":
             conflict_keys = (params.get("on_conflict") or "").split(",") if params.get("on_conflict") else []
             results = []
@@ -169,7 +177,7 @@ class BotRuntime:
 def test_startup_syncs_listed_otc_and_etf_stocks():
     with BotRuntime() as rt:
         stocks = {s["stock_no"]: s for s in rt.postgrest.db["stocks"]}
-        assert set(stocks) == {"2330", "3231", "5274", "0050", "006201"}
+        assert set(stocks) == {"2330", "3231", "5274", "0050", "006201", "00631L", "00632R"}
         assert stocks["2330"]["industry"] == "半導體"  # 公司資料優先，不被 STOCK_DAY_ALL 覆蓋成 ETF
         assert stocks["2330"]["market"] == "上市"
         assert stocks["5274"]["market"] == "上櫃"
@@ -248,6 +256,45 @@ def test_etf_by_name_grouped_and_labeled():
         assert "上市｜1,000 股" in content
 
 
+def test_code_suffix_autocompleted_when_unique():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("新增00631")
+        assert "已為 dada 新增 元大台灣50正2（00631L・上市）" in rt.last_reply()
+
+
+def test_ambiguous_code_offers_numbered_pick():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("新增0063 1000 35")
+        reply = rt.last_reply()
+        assert "有多個符合，請回覆數字選擇" in reply
+        assert "1. 00631L 元大台灣50正2" in reply
+        assert "2. 00632R 元大台灣50反1" in reply
+
+        rt.send("9")  # 超出 1-6 範圍 → 不是 pick，回指令說明
+        assert "指令說明" in rt.last_reply()
+
+        rt.send("1")
+        assert "已為 dada 新增 元大台灣50正2（00631L・上市）1,000 股＠35" in rt.last_reply()
+        holdings = rt.postgrest.db["holdings"]
+        assert holdings[-1]["stock_no"] == "00631L"
+        assert holdings[-1]["shares"] == 1000
+
+        rt.send("1")  # 已消耗，再選一次應提示沒有待選項目
+        assert "沒有等待選擇的項目" in rt.last_reply()
+
+
+def test_pick_out_of_range_keeps_pending():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("新增0063")
+        rt.send("5")
+        assert "請輸入 1～2 之間的數字" in rt.last_reply()
+        rt.send("2")
+        assert "已為 dada 新增 元大台灣50反1（00632R・上市）" in rt.last_reply()
+
+
 def test_requires_login_and_shows_help():
     with BotRuntime() as rt:
         rt.send("我的股票")
@@ -269,7 +316,7 @@ def test_daily_snapshot_stores_both_markets_and_is_idempotent():
         assert response.status_code == 200
         payload = response.json()
         assert payload["ok"] is True
-        assert payload["stocks_synced"] == 5
+        assert payload["stocks_synced"] == 7
         closes = {(r["stock_no"], r["trade_date"]): r["close"] for r in rt.postgrest.db["daily_closes"]}
         assert closes[("2330", "2026-07-02")] == 2465.0
         assert closes[("0050", "2026-07-02")] == 108.8

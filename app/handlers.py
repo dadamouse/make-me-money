@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 from .flex import build_portfolio_message
 from .parser import HELP_TEXT, Command, aggregate_holdings, format_number
+from .pending import PendingChoices
 from .supabase import SupabaseClient
 from .twse import TwseClient
 
@@ -69,10 +70,24 @@ _STOCK_COLUMNS = "select=stock_no,name,industry,market"
 async def _resolve_stock(db: SupabaseClient, user_input: str) -> dict | None:
     if _STOCK_NO_PATTERN.fullmatch(user_input):
         rows = await db.get(f"stocks?stock_no=eq.{quote(user_input)}&{_STOCK_COLUMNS}")
-        # 代號查不到對照表仍允許新增（可能是 ETF），名稱先以代號代替
-        return rows[0] if rows else {"stock_no": user_input, "name": user_input, "market": None, "unknown": True}
+        if rows:
+            return rows[0]
+        # 自動補齊尾碼：如 00631 → 00631L；唯一符合就採用，多個則請使用者選
+        candidates = await db.get(f"stocks?stock_no=like.{quote(user_input)}*&{_STOCK_COLUMNS}&order=stock_no&limit=6")
+        if len(candidates) == 1:
+            return candidates[0]
+        if candidates:
+            return {"candidates": candidates}
+        # 查不到仍允許新增（可能是極新掛牌），名稱先以代號代替
+        return {"stock_no": user_input, "name": user_input, "market": None, "unknown": True}
     rows = await db.get(f"stocks?name=eq.{quote(user_input)}&{_STOCK_COLUMNS}")
     return rows[0] if rows else None
+
+
+def _candidates_reply(user_input: str, candidates: list[dict]) -> str:
+    lines = [f"「{user_input}」有多個符合，請回覆數字選擇（5 分鐘內有效）："]
+    lines += [f"{i}. {c['stock_no']} {c['name']}" for i, c in enumerate(candidates, start=1)]
+    return "\n".join(lines)
 
 
 def _stock_label(stock: dict) -> str:
@@ -80,36 +95,67 @@ def _stock_label(stock: dict) -> str:
     return f"{stock['name']}（{stock['stock_no']}{market}）"
 
 
-async def _handle_add(db: SupabaseClient, member: dict, cmd: Command) -> str:
-    stock = await _resolve_stock(db, cmd.stock)
-    if not stock:
-        return f"❌ 找不到「{cmd.stock}」。請確認名稱（公司簡稱），或直接輸入代號，例如：新增2330"
+async def _insert_holding(db: SupabaseClient, member: dict, stock: dict, shares: float | None, cost: float | None) -> str:
     await db.insert(
         "holdings",
         {
             "member_id": member["id"],
             "stock_no": stock["stock_no"],
-            "shares": cmd.shares if cmd.shares is not None else 0,
-            "cost_price": cmd.cost,
+            "shares": shares if shares is not None else 0,
+            "cost_price": cost,
         },
     )
-    if cmd.shares is None:
+    if shares is None:
         detail = "（觀察，未記股數）"
     else:
-        cost_text = "" if cmd.cost is None else f"＠{format_number(cmd.cost)}"
-        detail = f"{format_number(cmd.shares)} 股{cost_text}"
+        cost_text = "" if cost is None else f"＠{format_number(cost)}"
+        detail = f"{format_number(shares)} 股{cost_text}"
     warning = "\n⚠️ 代號不在上市/上櫃公司對照表中（可能為 ETF），將自動嘗試兩邊的報價" if stock.get("unknown") else ""
     return f"✅ 已為 {member['name']} 新增 {_stock_label(stock)}{detail}{warning}"
 
 
-async def _handle_remove(db: SupabaseClient, member: dict, stock_input: str) -> str:
-    stock = await _resolve_stock(db, stock_input)
+async def _delete_holding(db: SupabaseClient, member: dict, stock: dict | None, stock_input: str) -> str:
     stock_no = stock["stock_no"] if stock else stock_input
     deleted = await db.delete(f"holdings?member_id=eq.{member['id']}&stock_no=eq.{quote(stock_no)}")
     if not deleted:
         return f"❌ {member['name']} 沒有「{stock_input}」的紀錄。"
     label = _stock_label(stock) if stock else stock_no
     return f"🗑 已刪除 {member['name']} 的 {label}，共 {len(deleted)} 筆。"
+
+
+async def _handle_add(db: SupabaseClient, pending: PendingChoices, line_user_id: str, member: dict, cmd: Command) -> str:
+    stock = await _resolve_stock(db, cmd.stock)
+    if not stock:
+        return f"❌ 找不到「{cmd.stock}」。請確認名稱（公司簡稱），或直接輸入代號，例如：新增2330"
+    if stock.get("candidates"):
+        pending.put(
+            line_user_id,
+            {"action": "add", "candidates": stock["candidates"], "shares": cmd.shares, "cost": cmd.cost},
+        )
+        return _candidates_reply(cmd.stock, stock["candidates"])
+    return await _insert_holding(db, member, stock, cmd.shares, cmd.cost)
+
+
+async def _handle_remove(db: SupabaseClient, pending: PendingChoices, line_user_id: str, member: dict, stock_input: str) -> str:
+    stock = await _resolve_stock(db, stock_input)
+    if stock and stock.get("candidates"):
+        pending.put(line_user_id, {"action": "remove", "candidates": stock["candidates"]})
+        return _candidates_reply(stock_input, stock["candidates"])
+    return await _delete_holding(db, member, stock, stock_input)
+
+
+async def _handle_pick(db: SupabaseClient, pending: PendingChoices, line_user_id: str, member: dict, cmd: Command) -> str:
+    pending_item = pending.pop(line_user_id)
+    if not pending_item:
+        return "目前沒有等待選擇的項目（可能已過期），請重新輸入指令。"
+    candidates = pending_item["candidates"]
+    if cmd.index > len(candidates):
+        pending.put(line_user_id, pending_item)
+        return f"請輸入 1～{len(candidates)} 之間的數字。"
+    stock = candidates[cmd.index - 1]
+    if pending_item["action"] == "add":
+        return await _insert_holding(db, member, stock, pending_item.get("shares"), pending_item.get("cost"))
+    return await _delete_holding(db, member, stock, stock["stock_no"])
 
 
 async def _handle_list(db: SupabaseClient, twse: TwseClient, member: dict) -> str | dict:
@@ -135,7 +181,13 @@ async def _handle_list(db: SupabaseClient, twse: TwseClient, member: dict) -> st
     return build_portfolio_message(member["name"], entries)
 
 
-async def handle_command(db: SupabaseClient, twse: TwseClient, line_user_id: str | None, cmd: Command) -> str | dict:
+async def handle_command(
+    db: SupabaseClient,
+    twse: TwseClient,
+    pending: PendingChoices,
+    line_user_id: str | None,
+    cmd: Command,
+) -> str | dict:
     if not line_user_id:
         return HELP_TEXT
     if cmd.action == "login":
@@ -148,9 +200,11 @@ async def handle_command(db: SupabaseClient, twse: TwseClient, line_user_id: str
     if not member:
         return "👋 請先輸入「登入你的名字」開始使用，例如：登入dada"
     if cmd.action == "add":
-        return await _handle_add(db, member, cmd)
+        return await _handle_add(db, pending, line_user_id, member, cmd)
     if cmd.action == "remove":
-        return await _handle_remove(db, member, cmd.stock)
+        return await _handle_remove(db, pending, line_user_id, member, cmd.stock)
+    if cmd.action == "pick":
+        return await _handle_pick(db, pending, line_user_id, member, cmd)
     if cmd.action == "list":
         return await _handle_list(db, twse, member)
     return HELP_TEXT

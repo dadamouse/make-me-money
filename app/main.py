@@ -11,6 +11,7 @@ from .config import Settings, load_settings
 from .handlers import handle_command
 from .line_client import LineClient, verify_signature
 from .parser import parse_command
+from .pending import PendingChoices
 from .snapshot import snapshot_daily_closes
 from .supabase import SupabaseClient
 from .twse import TwseClient, sync_stocks
@@ -28,6 +29,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         app.state.db = SupabaseClient(http, cfg.supabase_url, cfg.supabase_service_role_key)
         app.state.twse = TwseClient(http)
         app.state.line = LineClient(http, cfg.line_channel_access_token)
+        app.state.pending = PendingChoices()
         try:
             count = await sync_stocks(app.state.db, app.state.twse)
             logger.info("已同步上市股票對照表 %s 筆", count)
@@ -69,7 +71,13 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             line_user_id = (event.get("source") or {}).get("userId")
             cmd = parse_command(event["message"]["text"])
             try:
-                reply_text = await handle_command(request.app.state.db, request.app.state.twse, line_user_id, cmd)
+                reply_text = await handle_command(
+                    request.app.state.db,
+                    request.app.state.twse,
+                    request.app.state.pending,
+                    line_user_id,
+                    cmd,
+                )
             except Exception as error:
                 logger.exception("指令處理失敗 cmd=%s", cmd)
                 reply_text = f"⚠️ 系統錯誤：{error}"

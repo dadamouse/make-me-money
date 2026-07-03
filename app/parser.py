@@ -25,10 +25,13 @@ class Command:
     stock: str | None = None
     shares: float | None = None
     cost: float | None = None
+    index: int | None = None
 
 
 def parse_command(raw_text: str | None) -> Command:
     text = str(raw_text or "").strip()
+    if m := re.fullmatch(r"[1-6]", text):
+        return Command(action="pick", index=int(m.group(0)))
     if m := re.fullmatch(r"登入\s*(\S+)", text):
         return Command(action="login", name=m.group(1))
     if m := re.fullmatch(r"切換\s*(\S+)", text):
