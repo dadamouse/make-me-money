@@ -1,5 +1,5 @@
 from app.history import parse_tpex_month_rows, parse_twse_month_rows
-from app.indicators import compute_indicators, rsi, sma, stochastic_kd
+from app.indicators import compute_indicators, kd_series, rsi, rsi_series, sma, stochastic_kd
 
 
 def _rows(closes, spread=1.0):
@@ -61,6 +61,39 @@ def test_compute_indicators_full_and_partial():
     assert short["rsi14"] is None
     assert short["k"] is None
     assert short["j"] is None
+
+
+def test_rsi_series_matches_scalar_rsi():
+    closes = [100.0 + (i % 7) - 3 for i in range(40)]
+    series = rsi_series(closes)
+    assert series[:14] == [None] * 14
+    assert abs(series[-1] - rsi(closes)) < 1e-9
+    assert all(v is not None for v in series[14:])
+
+
+def test_kd_series_matches_scalar_kd():
+    rows = [
+        {"trade_date": f"2026-01-{i + 1:02d}", "close": 100.0 + i, "high": 102.0 + i, "low": 98.0 + i}
+        for i in range(30)
+    ]
+    k_values, d_values, j_values = kd_series(rows)
+    assert k_values[:8] == [None] * 8
+    k, d = stochastic_kd(rows)
+    assert abs(k_values[-1] - k) < 1e-9
+    assert abs(d_values[-1] - d) < 1e-9
+    assert abs(j_values[-1] - (3 * k - 2 * d)) < 1e-9
+
+
+def test_kd_series_skips_days_with_missing_high_low():
+    rows = [
+        {"trade_date": f"2026-01-{i + 1:02d}", "close": 100.0 + i, "high": 102.0 + i, "low": 98.0 + i}
+        for i in range(20)
+    ]
+    rows[12]["high"] = None
+    k_values, _, _ = kd_series(rows)
+    # 視窗包含缺值日（index 12 起連續 9 個視窗）→ None
+    assert all(k_values[i] is None for i in range(12, 21) if i < len(rows))
+    assert k_values[11] is not None
 
 
 def test_parse_twse_month_rows():

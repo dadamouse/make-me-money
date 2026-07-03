@@ -203,7 +203,7 @@ def build_chart_message(stock: dict, image_url: str, close: float | None, indica
     bubble = {
         "type": "bubble",
         "size": "giga",
-        "hero": {"type": "image", "url": image_url, "size": "full", "aspectRatio": "16:11", "aspectMode": "fit"},
+        "hero": {"type": "image", "url": image_url, "size": "full", "aspectRatio": "16:13", "aspectMode": "fit"},
         "body": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": body_rows},
     }
     return {"type": "flex", "altText": f"{title} K線圖", "contents": bubble}
