@@ -13,8 +13,12 @@ logger = logging.getLogger(__name__)
 STOCK_DAY_URL = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
 STOCK_DAY_ALL_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
 LISTED_COMPANIES_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
+LISTED_MARGINS_URL = "https://openapi.twse.com.tw/v1/exchangeReport/MI_MARGN"
+LISTED_DIVIDENDS_URL = "https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL"
 TPEX_COMPANIES_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TPEX_QUOTES_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
+TPEX_MARGINS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_margin_balance"
+TPEX_DIVIDENDS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_exright_prepost"
 
 MARKET_TWSE = "上市"
 MARKET_TPEX = "上櫃"
@@ -107,6 +111,23 @@ class TwseClient:
 
     async def fetch_otc_quotes(self) -> list:
         return await self._tpex_quotes()
+
+    async def fetch_listed_margins(self) -> list[dict]:
+        return await self._get_json(LISTED_MARGINS_URL)
+
+    async def fetch_otc_margins(self) -> list[dict]:
+        return await self._get_json(TPEX_MARGINS_URL)
+
+    async def fetch_listed_dividends(self) -> list[dict]:
+        return await self._get_json(LISTED_DIVIDENDS_URL)
+
+    async def fetch_otc_dividends(self) -> list[dict]:
+        return await self._get_json(TPEX_DIVIDENDS_URL)
+
+    async def _get_json(self, url: str) -> list[dict]:
+        response = await self._http.get(url)
+        response.raise_for_status()
+        return response.json()
 
 
 def _listed_rows(companies: list[dict]) -> list[dict]:

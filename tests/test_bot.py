@@ -33,10 +33,39 @@ TPEX_QUOTES = [
 ]
 
 LISTED_QUOTES_ALL = [
-    {"Code": "0050", "Name": "元大台灣50", "Date": "1150702", "ClosingPrice": "108.80"},
-    {"Code": "00631L", "Name": "元大台灣50正2", "Date": "1150702", "ClosingPrice": "38.88"},
-    {"Code": "00632R", "Name": "元大台灣50反1", "Date": "1150702", "ClosingPrice": "3.55"},
-    {"Code": "2330", "Name": "台積電", "Date": "1150702", "ClosingPrice": "2465.00"},
+    {"Code": "0050", "Name": "元大台灣50", "Date": "1150702", "ClosingPrice": "108.80", "TradeVolume": "50,000"},
+    {"Code": "00631L", "Name": "元大台灣50正2", "Date": "1150702", "ClosingPrice": "38.88", "TradeVolume": "10,000"},
+    {"Code": "00632R", "Name": "元大台灣50反1", "Date": "1150702", "ClosingPrice": "3.55", "TradeVolume": "20,000"},
+    {"Code": "2330", "Name": "台積電", "Date": "1150702", "ClosingPrice": "2465.00", "TradeVolume": "31,058,614"},
+]
+
+LISTED_MARGINS = [
+    {"股票代號": "2330", "融資今日餘額": "25,000", "融資前日餘額": "24,000", "融券今日餘額": "500", "融券前日餘額": "600"},
+]
+
+LISTED_DIVIDENDS = [
+    {"Date": "1150709", "Code": "2330", "Name": "台積電", "Exdividend": "息", "CashDividend": "5.00", "StockDividendRatio": ""},
+]
+
+TPEX_MARGINS = [
+    {
+        "Date": "1150703",
+        "SecuritiesCompanyCode": "5274",
+        "MarginPurchaseBalance": "1200",
+        "MarginPurchaseBalancePreviousDay": "1000",
+        "ShortSaleBalance": "10",
+        "ShortSaleBalancePreviousDay": "15",
+    },
+]
+
+TPEX_DIVIDENDS = [
+    {
+        "ExRrightsExDividendDate": "1150710",
+        "SecuritiesCompanyCode": "5274",
+        "ExRrightsExDividend": "除息",
+        "CashDividend": "3.50000000",
+        "StockDividendRatio": "0.00000000",
+    },
 ]
 
 TWSE_OK = {
@@ -49,7 +78,15 @@ class FakePostgrest:
     """記憶體版 PostgREST：支援本專案用到的 eq / in / on_conflict 語法。"""
 
     def __init__(self):
-        self.db = {"members": [], "line_bindings": [], "holdings": [], "stocks": [], "daily_closes": []}
+        self.db = {
+            "members": [],
+            "line_bindings": [],
+            "holdings": [],
+            "stocks": [],
+            "daily_closes": [],
+            "daily_margins": [],
+            "dividend_events": [],
+        }
         self._next_id = 1
 
     def handle(self, method: str, table: str, params: httpx.QueryParams, body):
@@ -118,12 +155,20 @@ class BotRuntime:
                 return httpx.Response(200, json=twse_response)
             if url.startswith("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"):
                 return httpx.Response(200, json=LISTED_QUOTES_ALL)
+            if url.startswith("https://openapi.twse.com.tw/v1/exchangeReport/MI_MARGN"):
+                return httpx.Response(200, json=LISTED_MARGINS)
+            if url.startswith("https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL"):
+                return httpx.Response(200, json=LISTED_DIVIDENDS)
             if url.startswith("https://openapi.twse.com.tw/"):
                 return httpx.Response(200, json=LISTED_COMPANIES)
             if url.startswith("https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"):
                 return httpx.Response(200, json=OTC_COMPANIES)
             if url.startswith("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"):
                 return httpx.Response(200, json=TPEX_QUOTES)
+            if url.startswith("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_margin_balance"):
+                return httpx.Response(200, json=TPEX_MARGINS)
+            if url.startswith("https://www.tpex.org.tw/openapi/v1/tpex_exright_prepost"):
+                return httpx.Response(200, json=TPEX_DIVIDENDS)
             if "/rest/v1/" in url:
                 table = url.split("/rest/v1/")[1].split("?")[0]
                 body = json.loads(request.content) if request.content else None
@@ -310,21 +355,35 @@ def test_daily_snapshot_requires_secret():
         assert rt.postgrest.db["daily_closes"] == []
 
 
-def test_daily_snapshot_stores_both_markets_and_is_idempotent():
+def test_daily_snapshot_stores_closes_margins_dividends():
     with BotRuntime() as rt:
         response = rt.client.post("/admin/daily-snapshot", headers={"x-cron-secret": "cron-secret"})
         assert response.status_code == 200
         payload = response.json()
         assert payload["ok"] is True
         assert payload["stocks_synced"] == 7
-        closes = {(r["stock_no"], r["trade_date"]): r["close"] for r in rt.postgrest.db["daily_closes"]}
-        assert closes[("2330", "2026-07-02")] == 2465.0
-        assert closes[("0050", "2026-07-02")] == 108.8
-        assert closes[("5274", "2026-07-02")] == 5000.0
-        assert closes[("006201", "2026-07-02")] == 49.3
-        # 重跑同一天：筆數不變（upsert）
+        assert payload["closes"] == 6
+        assert payload["margins"] == 2
+        assert payload["dividends"] == 2
+
+        closes = {(r["stock_no"], r["trade_date"]): r for r in rt.postgrest.db["daily_closes"]}
+        assert closes[("2330", "2026-07-02")]["close"] == 2465.0
+        assert closes[("2330", "2026-07-02")]["volume"] == 31058614.0
+        assert closes[("5274", "2026-07-02")]["close"] == 5000.0
+
+        margins = {(r["stock_no"], r["trade_date"]): r for r in rt.postgrest.db["daily_margins"]}
+        assert margins[("2330", "2026-07-02")]["margin_change"] == 1000.0
+        assert margins[("5274", "2026-07-03")]["short_change"] == -5.0
+
+        dividends = {(r["stock_no"], r["ex_date"]): r for r in rt.postgrest.db["dividend_events"]}
+        assert dividends[("2330", "2026-07-09")]["cash_dividend"] == 5.0
+        assert dividends[("5274", "2026-07-10")]["kind"] == "息"
+
+        # 重跑：全部 upsert，筆數不變
         rt.client.post("/admin/daily-snapshot", headers={"x-cron-secret": "cron-secret"})
-        assert len(rt.postgrest.db["daily_closes"]) == len(closes)
+        assert len(rt.postgrest.db["daily_closes"]) == 6
+        assert len(rt.postgrest.db["daily_margins"]) == 2
+        assert len(rt.postgrest.db["dividend_events"]) == 2
 
 
 def test_missing_quote_shows_warning():
