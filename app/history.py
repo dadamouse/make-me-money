@@ -61,7 +61,9 @@ def parse_tpex_month_rows(api_json: dict | None, stock_no: str) -> list[dict]:
 
 
 def _sufficient(rows: list[dict]) -> bool:
-    return len(rows) >= MIN_ROWS and all(r.get("high") is not None for r in rows[-10:])
+    recent = rows[-10:]
+    has_ohlc = all(r.get("high") is not None and r.get("open") is not None for r in recent)
+    return len(rows) >= MIN_ROWS and has_ohlc
 
 
 async def _read(db: SupabaseClient, stock_no: str) -> list[dict]:
