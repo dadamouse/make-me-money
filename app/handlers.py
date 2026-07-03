@@ -10,6 +10,7 @@ from .flex import build_chart_bubble, build_chart_carousel_message, build_chart_
 from .history import get_price_history
 from .indicators import compute_indicators
 from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number
+from .webview import portfolio_sig
 
 logger = logging.getLogger(__name__)
 
@@ -174,10 +175,15 @@ def _latest_by_stock(rows: list[dict]) -> dict[str, dict]:
     return latest
 
 
-async def _handle_list(deps: Deps, member: dict) -> str | dict:
+def portfolio_url(deps: Deps, member: dict) -> str:
+    return f"{deps.base_url}/p/{member['id']}?sig={portfolio_sig(member['id'], deps.sign_key)}"
+
+
+async def build_portfolio_entries(deps: Deps, member: dict) -> list[dict]:
+    """持股完整資料（報價、指標、法人、資券），供 Flex 卡片與網頁版共用。"""
     rows = await deps.db.get(f"holdings?member_id=eq.{member['id']}&select=stock_no,shares,cost_price")
     if not rows:
-        return f"{member['name']} 目前沒有任何持股，輸入「新增2330」開始記錄。"
+        return []
     aggregated = aggregate_holdings(rows)
     codes = ",".join(quote(a["stock_no"]) for a in aggregated)
     stock_rows = await deps.db.get(f"stocks?stock_no=in.({codes})&{_STOCK_COLUMNS}")
@@ -210,7 +216,14 @@ async def _handle_list(deps: Deps, member: dict) -> str | dict:
                 "institutional": institutional_map.get(agg["stock_no"]),
             }
         )
-    return build_portfolio_message(member["name"], entries)
+    return entries
+
+
+async def _handle_list(deps: Deps, member: dict) -> str | dict:
+    entries = await build_portfolio_entries(deps, member)
+    if not entries:
+        return f"{member['name']} 目前沒有任何持股，輸入「新增2330」開始記錄。"
+    return build_portfolio_message(member["name"], entries, portfolio_url(deps, member))
 
 
 async def _render_chart_reply(deps: Deps, stock: dict) -> str | dict:

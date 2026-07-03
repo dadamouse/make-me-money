@@ -14,3 +14,4 @@ class Deps:
     pending: PendingChoices
     charts: ChartStore
     base_url: str
+    sign_key: str  # 網頁版連結簽章用（取 LINE channel secret）

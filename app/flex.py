@@ -143,7 +143,11 @@ def _header(member_name: str, date_label: str | None) -> dict:
     return {"type": "box", "layout": "vertical", "backgroundColor": HEADER_BG, "paddingAll": "16px", "contents": contents}
 
 
-def _footer(summary: dict) -> dict:
+def _link_button(url: str, label: str) -> dict:
+    return {"type": "button", "style": "link", "height": "sm", "action": {"type": "uri", "label": label, "uri": url}}
+
+
+def _footer(summary: dict, portfolio_link: str | None = None) -> dict:
     rows = [
         _row(
             _text("總市值", size="sm", color=MUTED_COLOR, flex=3),
@@ -167,6 +171,8 @@ def _footer(summary: dict) -> dict:
                 ),
             )
         )
+    if portfolio_link:
+        rows.append(_link_button(portfolio_link, "🔗 開啟網頁版"))
     return {"type": "box", "layout": "vertical", "spacing": "sm", "paddingAll": "16px", "contents": rows}
 
 
@@ -226,7 +232,7 @@ def build_chart_carousel_message(member_name: str, bubbles: list[dict]) -> dict:
     }
 
 
-def build_portfolio_message(member_name: str, entries: list[dict]) -> dict:
+def build_portfolio_message(member_name: str, entries: list[dict], portfolio_link: str | None = None) -> dict:
     """組出「我的股票」的 Flex Message；altText 沿用純文字版（通知列預覽用）。"""
     summary = summarize_portfolio(entries)
     blocks = _industry_sections(summary["items"])
@@ -238,8 +244,8 @@ def build_portfolio_message(member_name: str, entries: list[dict]) -> dict:
         "body": {"type": "box", "layout": "vertical", "spacing": "md", "contents": blocks},
         "styles": {"footer": {"separator": True}},
     }
-    if summary["total_value"] > 0:
-        bubble["footer"] = _footer(summary)
+    if summary["total_value"] > 0 or portfolio_link:
+        bubble["footer"] = _footer(summary, portfolio_link)
     return {
         "type": "flex",
         "altText": format_portfolio(member_name, entries)[:_ALT_TEXT_MAX],

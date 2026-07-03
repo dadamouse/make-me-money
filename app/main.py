@@ -1,22 +1,28 @@
-"""FastAPI 入口：LINE webhook、健康檢查、每日快照端點、啟動時同步股票對照表。"""
+"""FastAPI 入口：LINE webhook、健康檢查、每日快照端點、網頁版持股頁、啟動時同步股票對照表。"""
 import hmac
 import json
 import logging
+import re
 from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse
 
-from .chart import ChartStore
+from .chart import ChartStore, render_kline_png
 from .config import Settings, load_settings
 from .deps import Deps
-from .handlers import handle_command
+from .handlers import build_portfolio_entries, handle_command
+from .history import get_price_history
 from .line_client import LineClient, verify_signature
-from .parser import parse_command
+from .parser import parse_command, summarize_portfolio
 from .pending import PendingChoices
 from .snapshot import run_snapshot
 from .supabase import SupabaseClient
 from .twse import TwseClient, sync_stocks
+from .webview import render_portfolio_html, verify_portfolio_sig
+
+_STOCK_NO_PATTERN = re.compile(r"[0-9]{4,6}[A-Z]?")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,6 +41,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             pending=PendingChoices(),
             charts=ChartStore(),
             base_url=cfg.base_url,
+            sign_key=cfg.line_channel_secret,
         )
         try:
             count = await sync_stocks(app.state.deps.db, app.state.deps.twse)
@@ -55,6 +62,38 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         png = request.app.state.deps.charts.get(chart_id)
         if not png:
             raise HTTPException(status_code=404, detail="chart not found or expired")
+        return Response(content=png, media_type="image/png")
+
+    @app.get("/p/{member_id}")
+    async def portfolio_page(member_id: int, request: Request, sig: str = "") -> HTMLResponse:
+        deps = request.app.state.deps
+        if not verify_portfolio_sig(member_id, deps.sign_key, sig):
+            raise HTTPException(status_code=403, detail="invalid signature")
+        members = await deps.db.get(f"members?id=eq.{member_id}&select=id,name")
+        if not members:
+            raise HTTPException(status_code=404, detail="member not found")
+        entries = await build_portfolio_entries(deps, members[0])
+        summary = summarize_portfolio(entries)
+        return HTMLResponse(
+            render_portfolio_html(members[0]["name"], summary["items"], summary["total_value"], summary["total_pnl"])
+        )
+
+    @app.get("/stock-chart/{stock_no}.png")
+    async def stock_chart_image(stock_no: str, request: Request) -> Response:
+        """網頁版即時線圖（記憶體快取 15 分鐘）。"""
+        deps = request.app.state.deps
+        if not _STOCK_NO_PATTERN.fullmatch(stock_no):
+            raise HTTPException(status_code=404, detail="invalid stock no")
+        cache_key = f"live:{stock_no}"
+        png = deps.charts.get(cache_key)
+        if not png:
+            stocks = await deps.db.get(f"stocks?stock_no=eq.{stock_no}&select=stock_no,name,market")
+            stock = stocks[0] if stocks else {"stock_no": stock_no, "name": stock_no, "market": None}
+            history = await get_price_history(deps.db, deps.twse, stock_no, stock.get("market"))
+            if len(history) < 5:
+                raise HTTPException(status_code=404, detail="insufficient history")
+            png = render_kline_png(history, f"{stock_no} {stock['name']}")
+            deps.charts.put(png, key=cache_key)
         return Response(content=png, media_type="image/png")
 
     @app.post("/admin/daily-snapshot")

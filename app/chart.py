@@ -40,9 +40,10 @@ class ChartStore:
         for key in expired:
             del self._items[key]
 
-    def put(self, png: bytes) -> str:
+    def put(self, png: bytes, key: str | None = None) -> str:
+        """未指定 key 時產生隨機 id；指定 key 可作為快取（如網頁版即時圖）。"""
         self._prune()
-        chart_id = uuid.uuid4().hex
+        chart_id = key or uuid.uuid4().hex
         self._items[chart_id] = (self._clock(), png)
         return chart_id
 

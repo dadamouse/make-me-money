@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
+from app.webview import portfolio_sig, verify_portfolio_sig
 
 SETTINGS = Settings(
     supabase_url="https://fake.supabase.co",
@@ -541,6 +542,52 @@ def test_simple_holdings_alias():
         rt.send("簡易持股")
         assert rt.last_message()["type"] == "flex"
         assert "dada 的持股" in rt.last_reply()
+
+
+def test_portfolio_sig_verify():
+    sig = portfolio_sig(1, "channel-secret")
+    assert verify_portfolio_sig(1, "channel-secret", sig)
+    assert not verify_portfolio_sig(1, "channel-secret", "bogus")
+    assert not verify_portfolio_sig(2, "channel-secret", sig)
+    assert not verify_portfolio_sig(1, "channel-secret", None)
+
+
+def test_portfolio_card_has_web_link():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("新增2330 1000 850")
+        rt.send("簡易持股")
+        content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
+        assert "開啟網頁版" in content
+        member_id = rt.postgrest.db["members"][0]["id"]
+        assert f"http://testserver/p/{member_id}?sig={portfolio_sig(member_id, 'channel-secret')}" in content
+
+
+def test_portfolio_web_page():
+    with BotRuntime() as rt:
+        _seed_history(rt, "2330")
+        rt.send("登入dada")
+        rt.send("新增2330 1000 850")
+        member_id = rt.postgrest.db["members"][0]["id"]
+        good_sig = portfolio_sig(member_id, "channel-secret")
+
+        page = rt.client.get(f"/p/{member_id}?sig={good_sig}")
+        assert page.status_code == 200
+        assert "dada 的持股" in page.text
+        assert "2330 台積電" in page.text
+        assert "/stock-chart/2330.png" in page.text
+
+        assert rt.client.get(f"/p/{member_id}?sig=bogus").status_code == 403
+        assert rt.client.get(f"/p/999?sig={portfolio_sig(999, 'channel-secret')}").status_code == 404
+
+
+def test_stock_chart_image_endpoint():
+    with BotRuntime() as rt:
+        _seed_history(rt, "2330")
+        image = rt.client.get("/stock-chart/2330.png")
+        assert image.status_code == 200
+        assert image.content[:8] == b"\x89PNG\r\n\x1a\n"
+        assert rt.client.get("/stock-chart/bad!code.png").status_code in (404, 422)
 
 
 def test_daily_snapshot_requires_secret():
