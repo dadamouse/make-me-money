@@ -1,0 +1,47 @@
+{
+  "name": "sync-stock-list",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "手動執行",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// n8n Code node：抓 TWSE 上市公司基本資料，upsert 進 Supabase stocks 對照表。\n// 手動執行一次即可，之後每月跑一次更新（新上市公司）。\n// 依賴環境變數：SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY\n\nconst helpers = this.helpers;\n\nconst SUPABASE_URL = $env.SUPABASE_URL;\nconst SUPABASE_SERVICE_ROLE_KEY = $env.SUPABASE_SERVICE_ROLE_KEY;\nif (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {\n  throw new Error('缺少環境變數 SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY，請到 HF Space Settings 設定');\n}\n\nconst companies = await helpers.httpRequest({\n  method: 'GET',\n  url: 'https://openapi.twse.com.tw/v1/opendata/t187ap03_L',\n  json: true,\n});\nif (!Array.isArray(companies) || companies.length === 0) {\n  throw new Error('TWSE OpenAPI 回傳空資料，請稍後再試');\n}\n\nconst rows = companies\n  .filter((c) => c['公司代號'] && c['公司簡稱'])\n  .map((c) => ({\n    stock_no: String(c['公司代號']).trim(),\n    name: String(c['公司簡稱']).trim(),\n  }));\n\nconst CHUNK_SIZE = 500;\nfor (let i = 0; i < rows.length; i += CHUNK_SIZE) {\n  await helpers.httpRequest({\n    method: 'POST',\n    url: `${SUPABASE_URL}/rest/v1/stocks?on_conflict=stock_no`,\n    headers: {\n      apikey: SUPABASE_SERVICE_ROLE_KEY,\n      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,\n      'Content-Type': 'application/json',\n      Prefer: 'resolution=merge-duplicates',\n    },\n    body: rows.slice(i, i + CHUNK_SIZE),\n    json: true,\n  });\n}\n\nreturn [{ json: { imported: rows.length } }];\n"
+      },
+      "id": "匯入上市股票對照表",
+      "name": "匯入上市股票對照表",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "手動執行": {
+      "main": [
+        [
+          {
+            "node": "匯入上市股票對照表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

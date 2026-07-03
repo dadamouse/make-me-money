@@ -1,0 +1,9 @@
+{
+  "name": "make-me-money",
+  "private": true,
+  "description": "LINE 家庭股票管理工具（n8n + Supabase + TWSE）",
+  "scripts": {
+    "test": "node --test n8n/test/parser.test.mjs n8n/test/bot.integration.test.mjs",
+    "build": "node n8n/build.mjs"
+  }
+}
