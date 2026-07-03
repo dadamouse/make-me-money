@@ -28,6 +28,12 @@ OTC_COMPANIES = [
 
 TPEX_QUOTES = [
     {"Date": "1150702", "SecuritiesCompanyCode": "5274", "Close": "5000.00"},
+    {"Date": "1150702", "SecuritiesCompanyCode": "006201", "CompanyName": "元大富櫃50", "Close": "49.30"},
+]
+
+LISTED_QUOTES_ALL = [
+    {"Code": "0050", "Name": "元大台灣50", "ClosingPrice": "108.80"},
+    {"Code": "2330", "Name": "台積電", "ClosingPrice": "2465.00"},
 ]
 
 TWSE_OK = {
@@ -99,6 +105,8 @@ class BotRuntime:
                 return httpx.Response(200, json={})
             if url.startswith("https://www.twse.com.tw/"):
                 return httpx.Response(200, json=twse_response)
+            if url.startswith("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"):
+                return httpx.Response(200, json=LISTED_QUOTES_ALL)
             if url.startswith("https://openapi.twse.com.tw/"):
                 return httpx.Response(200, json=LISTED_COMPANIES)
             if url.startswith("https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"):
@@ -155,13 +163,15 @@ class BotRuntime:
         return message.get("text") or message.get("altText")
 
 
-def test_startup_syncs_listed_and_otc_stocks():
+def test_startup_syncs_listed_otc_and_etf_stocks():
     with BotRuntime() as rt:
         stocks = {s["stock_no"]: s for s in rt.postgrest.db["stocks"]}
-        assert set(stocks) == {"2330", "3231", "5274"}
-        assert stocks["2330"]["industry"] == "半導體"
+        assert set(stocks) == {"2330", "3231", "5274", "0050", "006201"}
+        assert stocks["2330"]["industry"] == "半導體"  # 公司資料優先，不被 STOCK_DAY_ALL 覆蓋成 ETF
         assert stocks["2330"]["market"] == "上市"
         assert stocks["5274"]["market"] == "上櫃"
+        assert stocks["0050"] == {"stock_no": "0050", "name": "元大台灣50", "industry": "ETF", "market": "上市"}
+        assert stocks["006201"] == {"stock_no": "006201", "name": "元大富櫃50", "industry": "ETF", "market": "上櫃"}
 
 
 def test_invalid_signature_is_rejected_without_reply():
@@ -221,6 +231,18 @@ def test_otc_stock_uses_tpex_quote():
         assert "5,000" in content
         assert "上櫃｜100 股" in content
         assert "07/02" in content
+
+
+def test_etf_by_name_grouped_and_labeled():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("新增元大台灣50 1000 100")
+        assert "已為 dada 新增 元大台灣50（0050・上市）1,000 股＠100" in rt.last_reply()
+        rt.send("我的股票")
+        content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
+        assert "ETF" in content
+        assert "0050 元大台灣50" in content
+        assert "上市｜1,000 股" in content
 
 
 def test_requires_login_and_shows_help():

@@ -11,12 +11,15 @@ from .supabase import SupabaseClient
 logger = logging.getLogger(__name__)
 
 STOCK_DAY_URL = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
+STOCK_DAY_ALL_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
 LISTED_COMPANIES_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
 TPEX_COMPANIES_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TPEX_QUOTES_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
 
 MARKET_TWSE = "上市"
 MARKET_TPEX = "上櫃"
+ETF_INDUSTRY = "ETF"
+_ETF_CODE_PREFIX = "00"
 
 _SYNC_CHUNK_SIZE = 500
 _TPEX_QUOTES_TTL_SECONDS = 600
@@ -96,6 +99,15 @@ class TwseClient:
         response.raise_for_status()
         return response.json()
 
+    async def fetch_listed_quotes(self) -> list[dict]:
+        """TWSE 全市場日成交（STOCK_DAY_ALL），含 ETF 的代號與名稱。"""
+        response = await self._http.get(STOCK_DAY_ALL_URL)
+        response.raise_for_status()
+        return response.json()
+
+    async def fetch_otc_quotes(self) -> list:
+        return await self._tpex_quotes()
+
 
 def _listed_rows(companies: list[dict]) -> list[dict]:
     return [
@@ -123,19 +135,59 @@ def _otc_rows(companies: list[dict]) -> list[dict]:
     ]
 
 
+def _listed_etf_rows(quotes: list[dict]) -> list[dict]:
+    return [
+        {
+            "stock_no": str(q["Code"]).strip(),
+            "name": str(q["Name"]).strip(),
+            "industry": ETF_INDUSTRY,
+            "market": MARKET_TWSE,
+        }
+        for q in quotes
+        if str(q.get("Code", "")).startswith(_ETF_CODE_PREFIX) and q.get("Name")
+    ]
+
+
+def _otc_etf_rows(quotes: list[dict]) -> list[dict]:
+    return [
+        {
+            "stock_no": str(q["SecuritiesCompanyCode"]).strip(),
+            "name": str(q["CompanyName"]).strip(),
+            "industry": ETF_INDUSTRY,
+            "market": MARKET_TPEX,
+        }
+        for q in quotes
+        if str(q.get("SecuritiesCompanyCode", "")).startswith(_ETF_CODE_PREFIX) and q.get("CompanyName")
+    ]
+
+
 async def sync_stocks(db: SupabaseClient, twse: TwseClient) -> int:
-    """把上市＋上櫃公司對照 upsert 進 stocks 表，回傳筆數；上櫃來源失敗時仍同步上市。"""
+    """把上市＋上櫃公司與 ETF 對照 upsert 進 stocks 表，回傳筆數；次要來源失敗時仍同步其餘。"""
     rows = _listed_rows(await twse.fetch_listed_companies())
     if not rows:
         raise RuntimeError("TWSE OpenAPI 回傳空資料")
-    try:
-        rows += _otc_rows(await twse.fetch_otc_companies())
-    except httpx.HTTPError:
-        logger.warning("TPEx 公司資料同步失敗，僅同步上市公司", exc_info=True)
-    for i in range(0, len(rows), _SYNC_CHUNK_SIZE):
+    for label, loader in (
+        ("上櫃公司", lambda: _rows_from(twse.fetch_otc_companies(), _otc_rows)),
+        ("上市 ETF", lambda: _rows_from(twse.fetch_listed_quotes(), _listed_etf_rows)),
+        ("上櫃 ETF", lambda: _rows_from(twse.fetch_otc_quotes(), _otc_etf_rows)),
+    ):
+        try:
+            rows += await loader()
+        except httpx.HTTPError:
+            logger.warning("%s 同步失敗，跳過此來源", label, exc_info=True)
+    # 依 stock_no 去重（公司基本資料優先，upsert 同批不可有重複 key）
+    unique: dict[str, dict] = {}
+    for row in rows:
+        unique.setdefault(row["stock_no"], row)
+    deduped = list(unique.values())
+    for i in range(0, len(deduped), _SYNC_CHUNK_SIZE):
         await db.insert(
             "stocks?on_conflict=stock_no",
-            rows[i : i + _SYNC_CHUNK_SIZE],
+            deduped[i : i + _SYNC_CHUNK_SIZE],
             prefer="resolution=merge-duplicates",
         )
-    return len(rows)
+    return len(deduped)
+
+
+async def _rows_from(fetch_coroutine, mapper) -> list[dict]:
+    return mapper(await fetch_coroutine)
