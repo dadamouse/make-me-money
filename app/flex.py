@@ -27,6 +27,7 @@ def _pnl_color(pnl: float) -> str:
 
 def _stock_block(item: dict) -> dict:
     quote = item.get("quote")
+    market_prefix = f"{item['market']}｜" if item.get("market") else ""
     rows = [
         _row(
             _text(f"{item['stock_no']} {item['name']}", size="sm", weight="bold", color=TITLE_COLOR, flex=5, wrap=True),
@@ -39,26 +40,29 @@ def _stock_block(item: dict) -> dict:
             ),
         )
     ]
-    if quote:
-        if item["value"] is not None:
+    if not quote:
+        if market_prefix:
+            rows.append(_text(item["market"], size="xs", color=MUTED_COLOR))
+        return {"type": "box", "layout": "vertical", "spacing": "xs", "contents": rows}
+    if item["value"] is not None:
+        rows.append(
+            _row(
+                _text(f"{market_prefix}{format_number(item['shares'])} 股", size="xs", color=MUTED_COLOR, flex=4),
+                _text(f"市值 {format_number(item['value'])}", size="xs", color=VALUE_COLOR, align="end", flex=6),
+            )
+        )
+        if item["pnl"] is not None:
+            sign = sign_of(item["pnl"])
             rows.append(
-                _row(
-                    _text(f"{format_number(item['shares'])} 股", size="xs", color=MUTED_COLOR, flex=4),
-                    _text(f"市值 {format_number(item['value'])}", size="xs", color=VALUE_COLOR, align="end", flex=6),
+                _text(
+                    f"{sign}{format_number(item['pnl'])}（{sign}{item['pct']:.1f}%）",
+                    size="xs",
+                    align="end",
+                    color=_pnl_color(item["pnl"]),
                 )
             )
-            if item["pnl"] is not None:
-                sign = sign_of(item["pnl"])
-                rows.append(
-                    _text(
-                        f"{sign}{format_number(item['pnl'])}（{sign}{item['pct']:.1f}%）",
-                        size="xs",
-                        align="end",
-                        color=_pnl_color(item["pnl"]),
-                    )
-                )
-        else:
-            rows.append(_text("觀察中（未記股數）", size="xs", color=MUTED_COLOR))
+    else:
+        rows.append(_text(f"{market_prefix}觀察中（未記股數）", size="xs", color=MUTED_COLOR))
     return {"type": "box", "layout": "vertical", "spacing": "xs", "contents": rows}
 
 

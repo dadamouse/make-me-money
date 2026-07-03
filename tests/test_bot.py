@@ -22,6 +22,14 @@ LISTED_COMPANIES = [
     {"公司代號": "3231", "公司簡稱": "緯創", "產業別": "25"},
 ]
 
+OTC_COMPANIES = [
+    {"Date": "1150703", "SecuritiesCompanyCode": "5274", "CompanyAbbreviation": "信驊", "SecuritiesIndustryCode": "24"},
+]
+
+TPEX_QUOTES = [
+    {"Date": "1150702", "SecuritiesCompanyCode": "5274", "Close": "5000.00"},
+]
+
 TWSE_OK = {
     "stat": "OK",
     "data": [["115/07/02", "1,000", "2,355,000", "2,350.00", "2,360.00", "2,340.00", "2,355.00", "+5.00", "100"]],
@@ -93,6 +101,10 @@ class BotRuntime:
                 return httpx.Response(200, json=twse_response)
             if url.startswith("https://openapi.twse.com.tw/"):
                 return httpx.Response(200, json=LISTED_COMPANIES)
+            if url.startswith("https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"):
+                return httpx.Response(200, json=OTC_COMPANIES)
+            if url.startswith("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"):
+                return httpx.Response(200, json=TPEX_QUOTES)
             if "/rest/v1/" in url:
                 table = url.split("/rest/v1/")[1].split("?")[0]
                 body = json.loads(request.content) if request.content else None
@@ -143,12 +155,13 @@ class BotRuntime:
         return message.get("text") or message.get("altText")
 
 
-def test_startup_syncs_stock_list_with_industry():
+def test_startup_syncs_listed_and_otc_stocks():
     with BotRuntime() as rt:
         stocks = {s["stock_no"]: s for s in rt.postgrest.db["stocks"]}
-        assert set(stocks) == {"2330", "3231"}
+        assert set(stocks) == {"2330", "3231", "5274"}
         assert stocks["2330"]["industry"] == "半導體"
-        assert stocks["3231"]["industry"] == "電腦及週邊設備"
+        assert stocks["2330"]["market"] == "上市"
+        assert stocks["5274"]["market"] == "上櫃"
 
 
 def test_invalid_signature_is_rejected_without_reply():
@@ -166,10 +179,10 @@ def test_full_flow_login_add_list_switch_remove():
         assert rt.postgrest.db["line_bindings"][0]["member_id"] == rt.postgrest.db["members"][0]["id"]
 
         rt.send("新增2330 1000 850")
-        assert "已為 dada 新增 台積電（2330）1,000 股＠850" in rt.last_reply()
+        assert "已為 dada 新增 台積電（2330・上市）1,000 股＠850" in rt.last_reply()
 
         rt.send("新增緯創")
-        assert "已為 dada 新增 緯創（3231）（觀察，未記股數）" in rt.last_reply()
+        assert "已為 dada 新增 緯創（3231・上市）（觀察，未記股數）" in rt.last_reply()
 
         rt.send("我的股票")
         assert rt.last_message()["type"] == "flex"
@@ -192,9 +205,22 @@ def test_full_flow_login_add_list_switch_remove():
 
         rt.send("切換dada")
         rt.send("刪除2330")
-        assert "已刪除 dada 的 台積電（2330），共 1 筆" in rt.last_reply()
+        assert "已刪除 dada 的 台積電（2330・上市），共 1 筆" in rt.last_reply()
         dada_id = next(m["id"] for m in rt.postgrest.db["members"] if m["name"] == "dada")
         assert [h for h in rt.postgrest.db["holdings"] if h["member_id"] == dada_id and h["stock_no"] == "2330"] == []
+
+
+def test_otc_stock_uses_tpex_quote():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("新增信驊 100 3000")
+        assert "已為 dada 新增 信驊（5274・上櫃）100 股＠3,000" in rt.last_reply()
+        rt.send("我的股票")
+        content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
+        assert "5274 信驊" in content
+        assert "5,000" in content
+        assert "上櫃｜100 股" in content
+        assert "07/02" in content
 
 
 def test_requires_login_and_shows_help():

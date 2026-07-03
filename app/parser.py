@@ -72,6 +72,25 @@ def format_roc_date(roc_date: str | None) -> str:
     return f"{parts[1]}/{parts[2]}" if len(parts) == 3 else str(roc_date or "")
 
 
+def format_roc_compact(compact: str | None) -> str:
+    """TPEx 緊湊民國日期 '1150703' → '115/07/03'。"""
+    s = str(compact or "")
+    return f"{s[:-4]}/{s[-4:-2]}/{s[-2:]}" if len(s) >= 7 else s
+
+
+def parse_tpex_close(quotes: list | None, stock_no: str) -> dict | None:
+    """TPEx 每日收盤行情（全市場清單）→ 指定代號的收盤價。"""
+    for quote in quotes or []:
+        if str(quote.get("SecuritiesCompanyCode")) != str(stock_no):
+            continue
+        try:
+            close = float(str(quote.get("Close", "")).replace(",", ""))
+        except ValueError:
+            return None
+        return {"date": format_roc_compact(quote.get("Date")), "close": close}
+    return None
+
+
 def aggregate_holdings(rows: list[dict]) -> list[dict]:
     """holdings 資料列（stock_no, shares, cost_price）→ 依代號彙總。"""
     by_stock: dict[str, dict] = {}

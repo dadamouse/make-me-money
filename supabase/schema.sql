@@ -28,11 +28,12 @@ create table if not exists holdings (
 
 create index if not exists idx_holdings_member on holdings (member_id);
 
--- 上市股票代號↔名稱對照（server 啟動時自動從 TWSE OpenAPI 同步）
+-- 上市＋上櫃公司代號↔名稱對照（server 啟動時自動從 TWSE / TPEx OpenAPI 同步）
 create table if not exists stocks (
   stock_no text primary key,
   name text not null,                  -- 公司簡稱，如 '台積電'、'緯創'
-  industry text                        -- 產業別，如 '半導體'、'金融保險'
+  industry text,                       -- 產業別，如 '半導體'、'金融保險'
+  market text                          -- '上市' 或 '上櫃'
 );
 
 create index if not exists idx_stocks_name on stocks (name);

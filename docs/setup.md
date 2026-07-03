@@ -84,6 +84,6 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt pytest
 
 ## 已知限制
 
-- 只支援**上市**股票（TWSE）；上櫃（TPEx）查不到報價
+- 支援**上市**（TWSE）與**上櫃**（TPEx）股票；ETF 不在公司對照表中，但會自動嘗試兩邊報價
 - 報價是**收盤價**（最近交易日），不是即時價
 - HF free Space 若休眠，第一則訊息可能因喚醒延遲超過 reply token 時效而未回覆，再傳一次即可

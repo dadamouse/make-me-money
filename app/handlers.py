@@ -63,13 +63,21 @@ async def _handle_switch(db: SupabaseClient, line_user_id: str, name: str) -> st
     return f"🔁 已切換為「{member['name']}」，之後的新增/查詢都作用在這個帳戶。"
 
 
+_STOCK_COLUMNS = "select=stock_no,name,industry,market"
+
+
 async def _resolve_stock(db: SupabaseClient, user_input: str) -> dict | None:
     if _STOCK_NO_PATTERN.fullmatch(user_input):
-        rows = await db.get(f"stocks?stock_no=eq.{quote(user_input)}&select=stock_no,name")
-        # 代號查不到對照表仍允許新增（可能是上櫃股），名稱先以代號代替
-        return rows[0] if rows else {"stock_no": user_input, "name": user_input, "unknown": True}
-    rows = await db.get(f"stocks?name=eq.{quote(user_input)}&select=stock_no,name")
+        rows = await db.get(f"stocks?stock_no=eq.{quote(user_input)}&{_STOCK_COLUMNS}")
+        # 代號查不到對照表仍允許新增（可能是 ETF），名稱先以代號代替
+        return rows[0] if rows else {"stock_no": user_input, "name": user_input, "market": None, "unknown": True}
+    rows = await db.get(f"stocks?name=eq.{quote(user_input)}&{_STOCK_COLUMNS}")
     return rows[0] if rows else None
+
+
+def _stock_label(stock: dict) -> str:
+    market = f"・{stock['market']}" if stock.get("market") else ""
+    return f"{stock['name']}（{stock['stock_no']}{market}）"
 
 
 async def _handle_add(db: SupabaseClient, member: dict, cmd: Command) -> str:
@@ -90,8 +98,8 @@ async def _handle_add(db: SupabaseClient, member: dict, cmd: Command) -> str:
     else:
         cost_text = "" if cmd.cost is None else f"＠{format_number(cmd.cost)}"
         detail = f"{format_number(cmd.shares)} 股{cost_text}"
-    warning = "\n⚠️ 代號不在上市對照表中，報價可能查不到（上櫃股票暫不支援）" if stock.get("unknown") else ""
-    return f"✅ 已為 {member['name']} 新增 {stock['name']}（{stock['stock_no']}）{detail}{warning}"
+    warning = "\n⚠️ 代號不在上市/上櫃公司對照表中（可能為 ETF），將自動嘗試兩邊的報價" if stock.get("unknown") else ""
+    return f"✅ 已為 {member['name']} 新增 {_stock_label(stock)}{detail}{warning}"
 
 
 async def _handle_remove(db: SupabaseClient, member: dict, stock_input: str) -> str:
@@ -100,7 +108,7 @@ async def _handle_remove(db: SupabaseClient, member: dict, stock_input: str) -> 
     deleted = await db.delete(f"holdings?member_id=eq.{member['id']}&stock_no=eq.{quote(stock_no)}")
     if not deleted:
         return f"❌ {member['name']} 沒有「{stock_input}」的紀錄。"
-    label = f"{stock['name']}（{stock_no}）" if stock else stock_no
+    label = _stock_label(stock) if stock else stock_no
     return f"🗑 已刪除 {member['name']} 的 {label}，共 {len(deleted)} 筆。"
 
 
@@ -110,17 +118,20 @@ async def _handle_list(db: SupabaseClient, twse: TwseClient, member: dict) -> st
         return f"{member['name']} 目前沒有任何持股，輸入「新增2330」開始記錄。"
     aggregated = aggregate_holdings(rows)
     codes = ",".join(quote(a["stock_no"]) for a in aggregated)
-    stock_rows = await db.get(f"stocks?stock_no=in.({codes})&select=stock_no,name,industry")
+    stock_rows = await db.get(f"stocks?stock_no=in.({codes})&{_STOCK_COLUMNS}")
     info_map = {s["stock_no"]: s for s in stock_rows}
-    entries = [
-        {
-            **agg,
-            "name": info_map.get(agg["stock_no"], {}).get("name", agg["stock_no"]),
-            "industry": info_map.get(agg["stock_no"], {}).get("industry"),
-            "quote": await twse.fetch_close(agg["stock_no"]),
-        }
-        for agg in aggregated
-    ]
+    entries = []
+    for agg in aggregated:
+        info = info_map.get(agg["stock_no"], {})
+        entries.append(
+            {
+                **agg,
+                "name": info.get("name", agg["stock_no"]),
+                "industry": info.get("industry"),
+                "market": info.get("market"),
+                "quote": await twse.fetch_close(agg["stock_no"], info.get("market")),
+            }
+        )
     return build_portfolio_message(member["name"], entries)
 
 
