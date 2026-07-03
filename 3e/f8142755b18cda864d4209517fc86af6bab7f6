@@ -1,0 +1,44 @@
+app/flex.py
+  s_d4fdd612f940f8::t_5178744d771df1 30,43-55,57-61,64-65
+supabase/schema.sql
+  s_d4fdd612f940f8::t_9b71931a1fcc15 31,35-36
+tests/test_bot.py
+  s_d4fdd612f940f8::t_9f72d2ace7234d 158,161,163-164
+  s_d4fdd612f940f8::t_411fb5de7686aa 104-107
+  s_d4fdd612f940f8::t_7dd67cba91c129 182,185
+  s_d4fdd612f940f8::t_f020e1ebc44e88 213-225
+  s_d4fdd612f940f8::t_61b3cc1b881d0c 208
+  s_d4fdd612f940f8::t_d0fd68bf2ae636 25-32
+app/handlers.py
+  s_d4fdd612f940f8::t_252cb8e1e155e1 66-68,71-74,78-80
+  s_d4fdd612f940f8::t_9a9a44bb4eb403 121,123-134
+  s_d4fdd612f940f8::t_6f4c3ec8a35258 111
+  s_d4fdd612f940f8::t_21bb7dd725fd25 101-102
+  s_d4fdd612f940f8::t_6b3fc647a05f82 81-82
+app/parser.py
+  s_d4fdd612f940f8::t_4207979cabce37 75-93
+tests/test_tpex.py
+  s_d4fdd612f940f8::t_e522932203d908 1-21
+docs/setup.md
+  s_d4fdd612f940f8::t_c015e55633990a 87
+app/twse.py
+  s_d4fdd612f940f8::t_735f1e1a27a589 1,3,8,15-20,22,24,41-50,52,70-88,94-97,99-101,106,111-128,131-134
+supabase/migrations/20260703_add_stocks_industry.sql
+  s_d4fdd612f940f8::t_f3b30b5c2925b5 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3ef8142755b18cda864d4209517fc86af6bab7f6",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
