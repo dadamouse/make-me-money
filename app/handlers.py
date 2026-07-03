@@ -6,10 +6,10 @@ from urllib.parse import quote
 
 from .chart import render_kline_png
 from .deps import Deps
-from .flex import build_chart_message, build_portfolio_message
+from .flex import build_chart_bubble, build_chart_carousel_message, build_chart_message, build_portfolio_message
 from .history import get_price_history
 from .indicators import compute_indicators
-from .parser import HELP_TEXT, Command, aggregate_holdings, format_number
+from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number
 
 logger = logging.getLogger(__name__)
 
@@ -153,10 +153,7 @@ async def _handle_remove(deps: Deps, line_user_id: str, member: dict, stock_inpu
     return await _delete_holding(deps, member, stock, stock_input)
 
 
-async def _handle_pick(deps: Deps, line_user_id: str, member: dict, cmd: Command) -> str | dict:
-    pending_item = deps.pending.pop(line_user_id)
-    if not pending_item:
-        return "目前沒有等待選擇的項目（可能已過期），請重新輸入指令。"
+async def _apply_pick(deps: Deps, line_user_id: str, member: dict, cmd: Command, pending_item: dict) -> str | dict:
     candidates = pending_item["candidates"]
     if cmd.index > len(candidates):
         deps.pending.put(line_user_id, pending_item)
@@ -225,6 +222,96 @@ async def _render_chart_reply(deps: Deps, stock: dict) -> str | dict:
     image_url = f"{deps.base_url}/charts/{chart_id}.png"
     indicators = compute_indicators(history)
     return build_chart_message(stock, image_url, history[-1]["close"], indicators)
+
+
+_CAROUSEL_MAX_BUBBLES = 10  # LINE carousel 上限 12，保守取 10（回覆時間也較穩）
+
+
+async def _handle_charts_all(deps: Deps, member: dict) -> str | dict:
+    rows = await deps.db.get(f"holdings?member_id=eq.{member['id']}&select=stock_no")
+    if not rows:
+        return f"{member['name']} 目前沒有任何持股，輸入「新增2330」開始記錄。"
+    codes = sorted({str(row["stock_no"]) for row in rows})
+    truncated = len(codes) > _CAROUSEL_MAX_BUBBLES
+    codes = codes[:_CAROUSEL_MAX_BUBBLES]
+    codes_query = ",".join(quote(code) for code in codes)
+    stock_rows = await deps.db.get(f"stocks?stock_no=in.({codes_query})&{_STOCK_COLUMNS}")
+    info_map = {s["stock_no"]: s for s in stock_rows}
+
+    bubbles = []
+    skipped = []
+    for code in codes:
+        stock = info_map.get(code, {"stock_no": code, "name": code, "market": None})
+        try:
+            history = await get_price_history(deps.db, deps.twse, code, stock.get("market"))
+            if len(history) < _MIN_CHART_ROWS:
+                skipped.append(code)
+                continue
+            png = render_kline_png(history, f"{code} {stock['name']}")
+            chart_id = deps.charts.put(png)
+            image_url = f"{deps.base_url}/charts/{chart_id}.png"
+            bubbles.append(
+                build_chart_bubble(stock, image_url, history[-1]["close"], compute_indicators(history), size="mega")
+            )
+        except Exception:
+            logger.warning("持股線圖產生失敗 stock_no=%s", code, exc_info=True)
+            skipped.append(code)
+    if not bubbles:
+        return "❌ 目前持股都還畫不出線圖（歷史資料不足），過幾個交易日再試。"
+    message = build_chart_carousel_message(member["name"], bubbles)
+    if truncated or skipped:
+        notes = []
+        if truncated:
+            notes.append(f"僅顯示前 {_CAROUSEL_MAX_BUBBLES} 檔")
+        if skipped:
+            notes.append(f"資料不足略過：{'、'.join(skipped)}")
+        message["altText"] += f"（{'；'.join(notes)}）"
+    return message
+
+
+_CAROUSEL_MAX_BUBBLES = 10  # LINE carousel 上限 12，保守取 10（回覆時間也較穩）
+
+
+async def _handle_charts_all(deps: Deps, member: dict) -> str | dict:
+    rows = await deps.db.get(f"holdings?member_id=eq.{member['id']}&select=stock_no")
+    if not rows:
+        return f"{member['name']} 目前沒有任何持股，輸入「新增2330」開始記錄。"
+    codes = sorted({str(row["stock_no"]) for row in rows})
+    truncated = len(codes) > _CAROUSEL_MAX_BUBBLES
+    codes = codes[:_CAROUSEL_MAX_BUBBLES]
+    codes_query = ",".join(quote(code) for code in codes)
+    stock_rows = await deps.db.get(f"stocks?stock_no=in.({codes_query})&{_STOCK_COLUMNS}")
+    info_map = {s["stock_no"]: s for s in stock_rows}
+
+    bubbles = []
+    skipped = []
+    for code in codes:
+        stock = info_map.get(code, {"stock_no": code, "name": code, "market": None})
+        try:
+            history = await get_price_history(deps.db, deps.twse, code, stock.get("market"))
+            if len(history) < _MIN_CHART_ROWS:
+                skipped.append(code)
+                continue
+            png = render_kline_png(history, f"{code} {stock['name']}")
+            chart_id = deps.charts.put(png)
+            image_url = f"{deps.base_url}/charts/{chart_id}.png"
+            bubbles.append(
+                build_chart_bubble(stock, image_url, history[-1]["close"], compute_indicators(history), size="mega")
+            )
+        except Exception:
+            logger.warning("持股線圖產生失敗 stock_no=%s", code, exc_info=True)
+            skipped.append(code)
+    if not bubbles:
+        return "❌ 目前持股都還畫不出線圖（歷史資料不足），過幾個交易日再試。"
+    message = build_chart_carousel_message(member["name"], bubbles)
+    if truncated or skipped:
+        notes = []
+        if truncated:
+            notes.append(f"僅顯示前 {_CAROUSEL_MAX_BUBBLES} 檔")
+        if skipped:
+            notes.append(f"資料不足略過：{'、'.join(skipped)}")
+        message["altText"] += f"（{'；'.join(notes)}）"
+    return message
 
 
 async def _handle_chart(deps: Deps, line_user_id: str, cmd: Command) -> str | dict:
@@ -336,16 +423,26 @@ async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> 
     member = await _get_acting_member(deps, line_user_id)
     if not member:
         return "👋 請先輸入「登入你的名字」開始使用，例如：登入dada"
+    if cmd.action == "pick":
+        pending_item = deps.pending.pop(line_user_id)
+        if pending_item:
+            return await _apply_pick(deps, line_user_id, member, cmd, pending_item)
+        menu_action = MENU_ACTIONS.get(cmd.index)
+        if menu_action is None:
+            return HELP_TEXT
+        cmd = Command(action=menu_action)  # 數字當功能選單捷徑
     if cmd.action == "add":
         return await _handle_add(deps, line_user_id, member, cmd)
     if cmd.action == "remove":
         return await _handle_remove(deps, line_user_id, member, cmd.stock)
-    if cmd.action == "pick":
-        return await _handle_pick(deps, line_user_id, member, cmd)
     if cmd.action == "list":
         return await _handle_list(deps, member)
     if cmd.action == "news":
         return await _handle_news(deps, member)
     if cmd.action == "chart":
         return await _handle_chart(deps, line_user_id, cmd)
+    if cmd.action == "charts_all":
+        return await _handle_charts_all(deps, member)
+    if cmd.action == "volume_rank":
+        return await _handle_volume_rank(deps)
     return HELP_TEXT

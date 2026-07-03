@@ -188,8 +188,8 @@ def _industry_sections(items: list[dict]) -> list[dict]:
     return blocks
 
 
-def build_chart_message(stock: dict, image_url: str, close: float | None, indicators: dict | None) -> dict:
-    """K 線圖卡片：hero 放圖、body 放收盤價與技術指標摘要。"""
+def build_chart_bubble(stock: dict, image_url: str, close: float | None, indicators: dict | None, size: str = "giga") -> dict:
+    """K 線圖卡片 bubble：hero 放圖、body 放收盤價與技術指標摘要。"""
     title = f"{stock['stock_no']} {stock['name']}"
     market = f"・{stock['market']}" if stock.get("market") else ""
     body_rows = [
@@ -200,13 +200,30 @@ def build_chart_message(stock: dict, image_url: str, close: float | None, indica
     ]
     if close is not None:
         body_rows += _indicator_rows({"indicators": indicators}, close)
-    bubble = {
+    return {
         "type": "bubble",
-        "size": "giga",
+        "size": size,
         "hero": {"type": "image", "url": image_url, "size": "full", "aspectRatio": "16:13", "aspectMode": "fit"},
         "body": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": body_rows},
     }
-    return {"type": "flex", "altText": f"{title} K線圖", "contents": bubble}
+
+
+def build_chart_message(stock: dict, image_url: str, close: float | None, indicators: dict | None) -> dict:
+    title = f"{stock['stock_no']} {stock['name']}"
+    return {
+        "type": "flex",
+        "altText": f"{title} K線圖",
+        "contents": build_chart_bubble(stock, image_url, close, indicators),
+    }
+
+
+def build_chart_carousel_message(member_name: str, bubbles: list[dict]) -> dict:
+    """多檔持股線圖 carousel（LINE 上限 12 個 bubble；carousel 內不可用 giga）。"""
+    return {
+        "type": "flex",
+        "altText": f"{member_name} 的持股線圖（{len(bubbles)} 檔）",
+        "contents": {"type": "carousel", "contents": bubbles},
+    }
 
 
 def build_portfolio_message(member_name: str, entries: list[dict]) -> dict:

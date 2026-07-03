@@ -370,8 +370,8 @@ def test_ambiguous_code_offers_numbered_pick():
         assert "1. 00631L 元大台灣50正2" in reply
         assert "2. 00632R 元大台灣50反1" in reply
 
-        rt.send("9")  # 超出 1-6 範圍 → 不是 pick，回指令說明
-        assert "指令說明" in rt.last_reply()
+        rt.send("9")  # 超出 1-6 範圍 → 不是 pick，回功能選單
+        assert "功能選單" in rt.last_reply()
 
         rt.send("1")
         assert "已為 dada 新增 元大台灣50正2（00631L・上市）1,000 股＠35" in rt.last_reply()
@@ -379,8 +379,9 @@ def test_ambiguous_code_offers_numbered_pick():
         assert holdings[-1]["stock_no"] == "00631L"
         assert holdings[-1]["shares"] == 1000
 
-        rt.send("1")  # 已消耗，再選一次應提示沒有待選項目
-        assert "沒有等待選擇的項目" in rt.last_reply()
+        rt.send("1")  # 待選已消耗 → 數字改當功能選單捷徑（1＝簡易持股）
+        assert rt.last_message()["type"] == "flex"
+        assert "dada 的持股" in rt.last_reply()
 
 
 def test_pick_out_of_range_keeps_pending():
@@ -497,7 +498,49 @@ def test_requires_login_and_shows_help():
         rt.send("我的股票")
         assert "請先輸入「登入你的名字」" in rt.last_reply()
         rt.send("哈囉")
-        assert "指令說明" in rt.last_reply()
+        assert "功能選單" in rt.last_reply()
+
+
+def test_menu_number_shortcuts():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("新增2330 1000 850")
+        rt.send("1")  # 簡易持股
+        assert rt.last_message()["type"] == "flex"
+        assert "dada 的持股" in rt.last_reply()
+        rt.send("4")  # 量增排行
+        assert "📈 量增排行" in rt.last_reply()
+        rt.send("3")  # 今日資訊
+        assert "持股今日資訊" in rt.last_reply()
+
+
+def test_detailed_holdings_carousel():
+    with BotRuntime() as rt:
+        _seed_history(rt, "2330")
+        rt.send("登入dada")
+        rt.send("新增2330 1000 850")
+        rt.send("新增3231")  # 歷史不足，應被略過
+        rt.send("詳細持股")
+        message = rt.last_message()
+        assert message["type"] == "flex"
+        assert message["contents"]["type"] == "carousel"
+        bubbles = message["contents"]["contents"]
+        assert len(bubbles) == 1
+        assert bubbles[0]["size"] == "mega"
+        assert bubbles[0]["hero"]["url"].startswith("http://testserver/charts/")
+        assert "資料不足略過：3231" in message["altText"]
+        content = json.dumps(bubbles[0], ensure_ascii=False)
+        assert "2330 台積電" in content
+        assert "MA20 " in content
+
+
+def test_simple_holdings_alias():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("新增2330 1000 850")
+        rt.send("簡易持股")
+        assert rt.last_message()["type"] == "flex"
+        assert "dada 的持股" in rt.last_reply()
 
 
 def test_daily_snapshot_requires_secret():

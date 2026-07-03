@@ -4,19 +4,21 @@ from dataclasses import dataclass
 
 HELP_TEXT = "\n".join(
     [
-        "📖 指令說明",
-        "登入dada　　　　　建立/綁定身份",
-        "切換媽媽　　　　　代操作家人帳戶",
-        "新增2330　　　　　加入觀察（不記股數）",
-        "新增2330 1000 850　記 1000 股、每股成本 850",
-        "新增緯創　　　　　也可用公司簡稱",
-        "刪除2330　　　　　刪除該檔所有紀錄",
-        "我的股票　　　　　列出持股、損益與技術指標",
-        "今日資訊　　　　　持股的重大訊息與除權息提醒",
-        "圖2330　　　　　　近幾個月 K 線圖（含均線與成交量）",
-        "量增排行　　　　　全市場今日量增前 10 名",
+        "📖 功能選單（直接回覆數字）",
+        "1️⃣ 簡易持股｜總覽卡：損益、法人、資券、指標",
+        "2️⃣ 詳細持股｜每檔持股一張技術分析圖",
+        "3️⃣ 今日資訊｜持股重大訊息與除權息提醒",
+        "4️⃣ 量增排行｜全市場今日量增前 10 名",
+        "──────────",
+        "文字指令：",
+        "登入dada／切換媽媽",
+        "新增2330 1000 850／刪除2330",
+        "圖2330（單檔技術分析圖）",
     ]
 )
+
+# 無待選項目時，數字直接對應功能選單
+MENU_ACTIONS = {1: "list", 2: "charts_all", 3: "news", 4: "volume_rank"}
 
 _NUMBER = r"(\d+(?:\.\d+)?)"
 
@@ -48,10 +50,12 @@ def parse_command(raw_text: str | None) -> Command:
         )
     if m := re.fullmatch(r"刪除\s*(\S+)", text):
         return Command(action="remove", stock=m.group(1))
-    if re.fullmatch(r"我的股票|清單|列表", text):
+    if re.fullmatch(r"我的股票|簡易持股|清單|列表", text):
         return Command(action="list")
     if re.fullmatch(r"今日資訊|重大訊息|新聞", text):
         return Command(action="news")
+    if re.fullmatch(r"詳細持股|持股線圖|持股圖|我的線圖", text):
+        return Command(action="charts_all")
     if m := re.fullmatch(r"(?:線圖|[Kk]線|圖)\s*(\S+)", text):
         return Command(action="chart", stock=m.group(1))
     if re.fullmatch(r"量增排行|量增", text):
