@@ -120,7 +120,16 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         if status and status.get("running"):
             return {"ok": True, **status}
         deps = state.deps
-        stocks = await deps.db.get("stocks?select=stock_no,market&order=stock_no")
+        # Supabase 單次查詢上限 1000 列，分頁撈全表
+        stocks: list[dict] = []
+        page_size = 1000
+        while True:
+            page = await deps.db.get(
+                f"stocks?select=stock_no,market&order=stock_no&limit={page_size}&offset={len(stocks)}"
+            )
+            stocks += page
+            if len(page) < page_size:
+                break
         state.backfill_status = {"running": True, "total": len(stocks), "done": 0, "errors": 0}
 
         async def run() -> None:
