@@ -104,6 +104,23 @@ VOLUME_RANK = [
      "volume": 35919290.0, "prev_volume": 32905868.0},
 ]
 
+RPC_FIXTURES = {
+    "volume_surge_ranking": VOLUME_RANK,
+    "snapshot_depth": [{"insti_days": 3, "close_days": 25}],
+    "institutional_streak_picks": [
+        {"stock_no": "2330", "stock_name": "台積電", "foreign_streak": True, "trust_streak": False, "sum_net": 35000000},
+    ],
+    "co_buy_picks": [
+        {"stock_no": "2834", "stock_name": "臺企銀", "foreign_net": 19913948, "trust_net": 8994},
+    ],
+    "breakout_picks": [
+        {"stock_no": "3231", "stock_name": "緯創", "close": 159, "high20": 150, "volume": 24768914, "avg_volume": 12000000},
+    ],
+    "kd_golden_cross_picks": [
+        {"stock_no": "0050", "stock_name": "元大台灣50", "close": 108.8, "k_val": 25.3, "d_val": 22.1},
+    ],
+}
+
 TWSE_OK = {
     "stat": "OK",
     "data": [["115/07/02", "1,000", "2,355,000", "2,350.00", "2,360.00", "2,340.00", "2,355.00", "+5.00", "100"]],
@@ -184,9 +201,10 @@ class FakePostgrest:
 
 
 class BotRuntime:
-    def __init__(self, twse_response=TWSE_OK):
+    def __init__(self, twse_response=TWSE_OK, rpc_overrides=None):
         self.postgrest = FakePostgrest()
         self.replies = []
+        self.rpc_fixtures = {**RPC_FIXTURES, **(rpc_overrides or {})}
 
         def route(request: httpx.Request) -> httpx.Response:
             url = str(request.url)
@@ -221,8 +239,9 @@ class BotRuntime:
                 return httpx.Response(200, json=TPEX_DIVIDENDS)
             if url.startswith("https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading"):
                 return httpx.Response(200, json=TPEX_INSTITUTIONAL)
-            if "/rest/v1/rpc/volume_surge_ranking" in url:
-                return httpx.Response(200, json=VOLUME_RANK)
+            if "/rest/v1/rpc/" in url:
+                fn_name = url.split("/rest/v1/rpc/")[1].split("?")[0]
+                return httpx.Response(200, json=self.rpc_fixtures.get(fn_name, []))
             if "/rest/v1/" in url:
                 table = url.split("/rest/v1/")[1].split("?")[0]
                 body = json.loads(request.content) if request.content else None
@@ -492,6 +511,44 @@ def test_volume_rank_command():
         assert "24,768.91 張・前日 ×1.4｜收 159（+0.3%）" in reply
         assert "2. 2330 台積電" in reply
         assert "（-0.8%）" in reply
+
+
+def test_daily_picks_command_with_explanations():
+    with BotRuntime() as rt:
+        rt.send("每日選股")  # 不需登入
+        reply = rt.last_reply()
+        assert "🎯 每日選股" in reply
+        assert "【法人連買 3 日】" in reply
+        assert "外資或投信連續 3 個交易日買超" in reply  # 篩選邏輯說明
+        assert "2330 台積電（外資連買，3日合計 +35,000 張）" in reply
+        assert "2834 臺企銀（外資 +19,914 張、投信 +9 張）" in reply
+        assert "3231 緯創（收 159 創20日新高，量為均量 2.1 倍）" in reply
+        assert "0050 元大台灣50（K 25 上穿 D 22）" in reply
+        assert "非投資建議" in reply
+
+
+def test_daily_picks_skips_strategies_without_data():
+    with BotRuntime(rpc_overrides={"snapshot_depth": [{"insti_days": 1, "close_days": 10}]}) as rt:
+        rt.send("選股")
+        reply = rt.last_reply()
+        assert "⏳ 資料累積中（需 3 個交易日，目前 1）" in reply  # 法人連買 skip
+        assert "⏳ 資料累積中（需 21 個交易日，目前 10）" in reply  # 突破 skip
+        assert "2834 臺企銀" in reply  # 同買仍可跑
+
+
+def test_daily_picks_push_endpoint():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        response = rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "cron-secret"})
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["ok"] is True
+        assert payload["pushed"] == 1
+        push = rt.replies[-1]
+        assert push["to"] == ["U-test"]
+        assert "🎯 每日選股" in push["messages"][0]["text"]
+
+        assert rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "wrong"}).status_code == 403
 
 
 def test_requires_login_and_shows_help():

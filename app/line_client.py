@@ -6,7 +6,9 @@ import hmac
 import httpx
 
 REPLY_URL = "https://api.line.me/v2/bot/message/reply"
+MULTICAST_URL = "https://api.line.me/v2/bot/message/multicast"
 _MAX_TEXT_LENGTH = 4900
+_MULTICAST_MAX_RECIPIENTS = 500
 
 
 def verify_signature(channel_secret: str, body: bytes, signature: str | None) -> bool:
@@ -31,5 +33,17 @@ class LineClient:
             REPLY_URL,
             headers={"Authorization": f"Bearer {self._access_token}"},
             json={"replyToken": reply_token, "messages": [payload]},
+        )
+        response.raise_for_status()
+
+    async def multicast(self, user_ids: list[str], text: str) -> None:
+        """主動推播文字訊息給多位使用者（每日選股用）。"""
+        response = await self._http.post(
+            MULTICAST_URL,
+            headers={"Authorization": f"Bearer {self._access_token}"},
+            json={
+                "to": user_ids[:_MULTICAST_MAX_RECIPIENTS],
+                "messages": [{"type": "text", "text": text[:_MAX_TEXT_LENGTH]}],
+            },
         )
         response.raise_for_status()

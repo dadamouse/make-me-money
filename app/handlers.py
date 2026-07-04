@@ -10,6 +10,7 @@ from .flex import build_chart_bubble, build_chart_carousel_message, build_chart_
 from .history import get_price_history
 from .indicators import compute_indicators
 from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number
+from .screener import format_picks_message, run_daily_picks
 from .webview import portfolio_sig
 
 logger = logging.getLogger(__name__)
@@ -433,6 +434,8 @@ async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> 
         return HELP_TEXT
     if cmd.action == "volume_rank":  # 全市場排行，不需身份
         return await _handle_volume_rank(deps)
+    if cmd.action == "picks":  # 全市場選股，不需身份
+        return format_picks_message(await run_daily_picks(deps))
     member = await _get_acting_member(deps, line_user_id)
     if not member:
         return "👋 請先輸入「登入你的名字」開始使用，例如：登入dada"
@@ -458,4 +461,6 @@ async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> 
         return await _handle_charts_all(deps, member)
     if cmd.action == "volume_rank":
         return await _handle_volume_rank(deps)
+    if cmd.action == "picks":
+        return format_picks_message(await run_daily_picks(deps))
     return HELP_TEXT

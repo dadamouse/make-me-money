@@ -44,6 +44,19 @@ select cron.schedule(
   $$
 );
 
+-- 每日選股推播：台北 22:45（晚間快照後），符合條件才推播
+select cron.schedule(
+  'daily-stock-picks',
+  '45 14 * * 1-5',
+  $$
+  select net.http_post(
+    url := 'https://dadamouse-line-stock-bot.hf.space/admin/daily-picks',
+    headers := '{"x-cron-secret": "YOUR_CRON_SECRET"}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+  $$
+);
+
 -- 查看排程：select * from cron.job;
 -- 查看執行紀錄：select * from cron.job_run_details order by start_time desc limit 10;
 -- 取消排程：select cron.unschedule('daily-stock-snapshot');

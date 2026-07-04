@@ -17,6 +17,7 @@ from .history import get_price_history
 from .line_client import LineClient, verify_signature
 from .parser import parse_command, summarize_portfolio
 from .pending import PendingChoices
+from .screener import format_picks_message, has_picks, run_daily_picks
 from .snapshot import run_snapshot
 from .supabase import SupabaseClient
 from .twse import TwseClient, sync_stocks
@@ -95,6 +96,25 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             png = render_kline_png(history, f"{stock_no} {stock['name']}")
             deps.charts.put(png, key=cache_key)
         return Response(content=png, media_type="image/png")
+
+    @app.post("/admin/daily-picks")
+    async def daily_picks(request: Request) -> dict:
+        """由 pg_cron 於晚間快照後呼叫：跑選股並推播給所有綁定的使用者。"""
+        secret = request.app.state.settings.cron_secret
+        provided = request.headers.get("x-cron-secret", "")
+        if not secret or not hmac.compare_digest(secret, provided):
+            raise HTTPException(status_code=403, detail="invalid cron secret")
+        deps = request.app.state.deps
+        result = await run_daily_picks(deps)
+        pushed = 0
+        if has_picks(result):
+            bindings = await deps.db.get("line_bindings?select=line_user_id")
+            user_ids = [b["line_user_id"] for b in bindings]
+            if user_ids:
+                await request.app.state.line.multicast(user_ids, format_picks_message(result))
+                pushed = len(user_ids)
+        logger.info("每日選股完成 pushed=%s", pushed)
+        return {"ok": True, "pushed": pushed, "date": result["date"]}
 
     @app.post("/admin/daily-snapshot")
     async def daily_snapshot(request: Request) -> dict:
