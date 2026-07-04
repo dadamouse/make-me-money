@@ -1,0 +1,40 @@
+supabase/migrations/20260704_screener_fns.sql
+  s_d4fdd612f940f8::t_e46dafd5742b75 1-119
+app/screener.py
+  s_d4fdd612f940f8::t_f763df523cbc88 1-139
+tests/test_bot.py
+  s_d4fdd612f940f8::t_f31ea3ec04dc03 107-123
+  s_d4fdd612f940f8::t_c564d1b0d94b2c 204,207,242-244,516-553
+app/main.py
+  s_d4fdd612f940f8::t_451cb988ab75ef 100-118
+  s_d4fdd612f940f8::t_540acbdadd330b 20
+supabase/cron.sql
+  s_d4fdd612f940f8::t_7e1936890a36c8 47-59
+app/handlers.py
+  s_d4fdd612f940f8::t_1e0dc572736bc0 464-465
+  s_d4fdd612f940f8::t_4afab01daf16ea 13
+  s_d4fdd612f940f8::t_1738cd03fdbfb5 437-438
+app/parser.py
+  s_d4fdd612f940f8::t_c29055a7252cea 22
+  s_d4fdd612f940f8::t_071d610c925ccb 12
+  s_d4fdd612f940f8::t_bade64455721ca 64-65
+app/line_client.py
+  s_d4fdd612f940f8::t_bbb991dad2f796 9,11
+  s_d4fdd612f940f8::t_45036ea7581908 38-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f1376c88d71f1561d0d38f0bf813a784d6123f4d",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
