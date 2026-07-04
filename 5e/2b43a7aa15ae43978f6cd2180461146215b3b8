@@ -1,0 +1,24 @@
+app/main.py
+  s_d4fdd612f940f8::t_4f3ae7040a1fd6 247
+  s_d4fdd612f940f8::t_4a44d5b9e509c0 85-109,117
+app/webview.py
+  s_d4fdd612f940f8::t_d43396c4ec9dd7 118
+  s_d4fdd612f940f8::t_aea2d20a00b84c 122-131,139
+  s_d4fdd612f940f8::t_65c658b17df334 119-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5e2b43a7aa15ae43978f6cd2180461146215b3b8",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
