@@ -50,8 +50,14 @@ language sql stable as $$
   limit limit_n
 $$;
 
--- 策略三：帶量突破 20 日新高（量 > 前20日均量 1.5 倍、今日至少 1000 張）
-create or replace function breakout_picks(limit_n int default 5, p_market text default null, min_volume numeric default 1000000)
+-- 策略三：帶量突破 20 日新高
+-- 量能條件：今日量 > 前 5 日均量 × vol_multiple（上市 3 倍／上櫃 10 倍），並以 min_volume 張數當保底
+create or replace function breakout_picks(
+  limit_n int default 5,
+  p_market text default null,
+  min_volume numeric default 1000000,
+  vol_multiple numeric default 3
+)
 returns table (stock_no text, stock_name text, close numeric, high20 numeric, volume numeric, avg_volume numeric)
 language sql stable as $$
   with ranked as (
@@ -62,17 +68,23 @@ language sql stable as $$
   ),
   today as (select * from ranked where rn = 1),
   prior as (
-    select r.stock_no, max(r.close) as prior_high, avg(r.volume) as prior_avg_vol, count(*) as cnt
+    select r.stock_no, max(r.close) as prior_high, count(*) as cnt
     from ranked r where r.rn between 2 and 21
     group by r.stock_no
+  ),
+  prior5 as (
+    select r.stock_no, avg(r.volume) as avg_vol5, count(*) as cnt5
+    from ranked r where r.rn between 2 and 6
+    group by r.stock_no
   )
-  select t.stock_no, s.name, t.close, p.prior_high, t.volume, round(p.prior_avg_vol)
+  select t.stock_no, s.name, t.close, p.prior_high, t.volume, round(p5.avg_vol5)
   from today t
   join prior p on p.stock_no = t.stock_no
+  join prior5 p5 on p5.stock_no = t.stock_no
   left join stocks s on s.stock_no = t.stock_no
-  where p.cnt >= 20
+  where p.cnt >= 20 and p5.cnt5 >= 5
     and t.close > p.prior_high
-    and t.volume > 1.5 * p.prior_avg_vol
+    and t.volume > vol_multiple * p5.avg_vol5
     and t.volume >= min_volume
     and (p_market is null or s.market = p_market)
   order by (t.close - p.prior_high) / p.prior_high desc

@@ -532,8 +532,8 @@ def test_daily_picks_split_by_market_with_explanations():
         assert "2834 臺企銀（外資 +19,914 張、投信 +9 張）" in reply
         assert "6182 合晶（外資 +3,798 張、投信 +5,371 張）" in reply
         assert reply.index("臺企銀") < reply.index("合晶")
-        assert "量門檻：上市 1,000 張／上櫃 300 張" in reply
-        assert "3231 緯創（收 159 創20日新高，量為均量 2.1 倍）" in reply
+        assert "上市 >5日均量 3 倍（保底 1,000 張）／上櫃 >5日均量 10 倍（保底 300 張）" in reply
+        assert "3231 緯創（收 159 創20日新高，量為5日均量 2.1 倍）" in reply
         assert "0050 元大台灣50（K 25 上穿 D 22）" in reply
         assert "非投資建議" in reply
 

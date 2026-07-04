@@ -36,7 +36,7 @@ def _format_breakout(row: dict) -> str:
     ratio = float(row["volume"]) / float(row["avg_volume"]) if float(row["avg_volume"]) else 0
     return (
         f"{row['stock_no']} {row.get('stock_name') or ''}"
-        f"（收 {format_number(float(row['close']))} 創20日新高，量為均量 {ratio:.1f} 倍）"
+        f"（收 {format_number(float(row['close']))} 創20日新高，量為5日均量 {ratio:.1f} 倍）"
     )
 
 
@@ -68,10 +68,13 @@ _STRATEGIES = (
     },
     {
         "title": "帶量突破 20 日新高",
-        "desc": "收盤創 20 日新高且成交量逾前 20 日均量 1.5 倍（量門檻：上市 1,000 張／上櫃 300 張）",
+        "desc": "收盤創 20 日新高且量能放大：上市 >5日均量 3 倍（保底 1,000 張）／上櫃 >5日均量 10 倍（保底 300 張）",
         "rpc": "breakout_picks",
         "args": {"limit_n": _LIMIT},
-        "market_args": {"上市": {"min_volume": 1_000_000}, "上櫃": {"min_volume": 300_000}},
+        "market_args": {
+            "上市": {"min_volume": 1_000_000, "vol_multiple": 3},
+            "上櫃": {"min_volume": 300_000, "vol_multiple": 10},
+        },
         "depth_key": "close_days",
         "min_depth": 21,
         "format": _format_breakout,
