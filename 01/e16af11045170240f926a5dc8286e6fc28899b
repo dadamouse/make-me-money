@@ -1,0 +1,29 @@
+app/line_client.py
+  s_d4fdd612f940f8::t_1a0af2d4216ef3 40-48
+  s_d4fdd612f940f8::t_ab52e44e806aa5 10
+app/main.py
+  s_d4fdd612f940f8::t_f20db5ca851f60 26
+  s_d4fdd612f940f8::t_94ef2e2eccfd2a 184-192
+  s_d4fdd612f940f8::t_ca4e7e796cae91 102,108,112,141-180
+  s_d4fdd612f940f8::t_de09d6869d25b8 181-183
+app/weekly.py
+  s_d4fdd612f940f8::t_001f269d5c826c 1-148
+tests/test_weekly.py
+  s_d4fdd612f940f8::t_00a508a7856036 1-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "01e16af11045170240f926a5dc8286e6fc28899b",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
