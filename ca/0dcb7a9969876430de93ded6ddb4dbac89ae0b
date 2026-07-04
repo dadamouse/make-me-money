@@ -1,0 +1,29 @@
+tests/test_bot.py
+  s_d4fdd612f940f8::t_46d1b4411d2f79 109-115
+  s_d4fdd612f940f8::t_fef74d3c35e1b4 544-547
+supabase/migrations/20260704_screener_fns.sql
+  s_d4fdd612f940f8::t_a0f7894312c0d6 137-145,149,151,153-179,186-187,189,191-196
+  s_d4fdd612f940f8::t_ecb02e6e0e94ef 146-148,150,152,180-185,188,190
+  s_d4fdd612f940f8::t_822c7daccf9625 5,9-10
+app/screener.py
+  s_d4fdd612f940f8::t_f7e8e917da717f 109-128
+  s_d4fdd612f940f8::t_fac6b978839ae4 50-67
+supabase/schema.sql
+  s_d4fdd612f940f8::t_63427d77a231b1 138,142-143,270-329
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ca0dcb7a9969876430de93ded6ddb4dbac89ae0b",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
