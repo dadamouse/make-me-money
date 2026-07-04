@@ -143,7 +143,7 @@ language sql stable as $$
 $$;
 
 -- 策略一：法人連買 N 日（外資或投信連續買超，依合計買超排序）
-create or replace function institutional_streak_picks(days int default 3, limit_n int default 5)
+create or replace function institutional_streak_picks(days int default 3, limit_n int default 5, p_market text default null)
 returns table (stock_no text, stock_name text, foreign_streak boolean, trust_streak boolean, sum_net numeric)
 language sql stable as $$
   with recent_dates as (
@@ -163,12 +163,13 @@ language sql stable as $$
   from agg a
   left join stocks s on s.stock_no = a.stock_no
   where a.present_days = days and (a.f_days = days or a.t_days = days)
+    and (p_market is null or s.market = p_market)
   order by a.net_sum desc
   limit limit_n
 $$;
 
 -- 策略二：外資投信同買（最新交易日兩者皆買超）
-create or replace function co_buy_picks(limit_n int default 5)
+create or replace function co_buy_picks(limit_n int default 5, p_market text default null)
 returns table (stock_no text, stock_name text, foreign_net numeric, trust_net numeric)
 language sql stable as $$
   with latest as (select max(trade_date) as d from daily_institutional)
@@ -177,12 +178,13 @@ language sql stable as $$
   join latest on di.trade_date = latest.d
   left join stocks s on s.stock_no = di.stock_no
   where di.foreign_net > 0 and di.trust_net > 0
+    and (p_market is null or s.market = p_market)
   order by di.foreign_net + di.trust_net desc
   limit limit_n
 $$;
 
 -- 策略三：帶量突破 20 日新高（量 > 前20日均量 1.5 倍、今日至少 1000 張）
-create or replace function breakout_picks(limit_n int default 5)
+create or replace function breakout_picks(limit_n int default 5, p_market text default null, min_volume numeric default 1000000)
 returns table (stock_no text, stock_name text, close numeric, high20 numeric, volume numeric, avg_volume numeric)
 language sql stable as $$
   with ranked as (
@@ -204,13 +206,14 @@ language sql stable as $$
   where p.cnt >= 20
     and t.close > p.prior_high
     and t.volume > 1.5 * p.prior_avg_vol
-    and t.volume >= 1000000
+    and t.volume >= min_volume
+    and (p_market is null or s.market = p_market)
   order by (t.close - p.prior_high) / p.prior_high desc
   limit limit_n
 $$;
 
 -- 策略四：KD 低檔黃金交叉（slow stochastic 近似：K=SMA3(RSV9)、D=SMA3(K)；昨日 K<30 且 K<=D，今日 K>D）
-create or replace function kd_golden_cross_picks(limit_n int default 5)
+create or replace function kd_golden_cross_picks(limit_n int default 5, p_market text default null)
 returns table (stock_no text, stock_name text, close numeric, k_val numeric, d_val numeric)
 language sql stable as $$
   with base as (
@@ -247,6 +250,7 @@ language sql stable as $$
     and t.kv > t.dv
     and y.kv <= y.dv
     and y.kv < 30
+    and (p_market is null or s.market = p_market)
   order by t.kv - t.dv desc
   limit limit_n
 $$;

@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 
 _TAIPEI_TZ = timezone(timedelta(hours=8))
 _STREAK_DAYS = 3
-_LIMIT = 5
+_LIMIT = 3  # 每策略每市場前 N 名
+_MARKETS = ("上市", "上櫃")
 
 
 def _lots(shares: float) -> str:
@@ -67,9 +68,10 @@ _STRATEGIES = (
     },
     {
         "title": "帶量突破 20 日新高",
-        "desc": "收盤創 20 日新高且成交量逾前 20 日均量 1.5 倍（限 1,000 張以上）",
+        "desc": "收盤創 20 日新高且成交量逾前 20 日均量 1.5 倍（量門檻：上市 1,000 張／上櫃 300 張）",
         "rpc": "breakout_picks",
         "args": {"limit_n": _LIMIT},
+        "market_args": {"上市": {"min_volume": 1_000_000}, "上櫃": {"min_volume": 300_000}},
         "depth_key": "close_days",
         "min_depth": 21,
         "format": _format_breakout,
@@ -87,6 +89,7 @@ _STRATEGIES = (
 
 
 async def run_daily_picks(deps: Deps) -> dict:
+    """每個策略分上市/上櫃各自排名（規模與流動性差異大，混排會被上市大型股洗榜）。"""
     depth_rows = await deps.db.rpc("snapshot_depth", {})
     depth = depth_rows[0] if depth_rows else {}
     sections = []
@@ -97,29 +100,30 @@ async def run_daily_picks(deps: Deps) -> dict:
                 {
                     "title": strategy["title"],
                     "desc": strategy["desc"],
-                    "picks": [],
+                    "markets": [],
                     "skipped": f"資料累積中（需 {strategy['min_depth']} 個交易日，目前 {have}）",
                 }
             )
             continue
-        try:
-            rows = await deps.db.rpc(strategy["rpc"], strategy["args"])
-        except Exception:
-            logger.warning("選股策略執行失敗 %s", strategy["rpc"], exc_info=True)
-            rows = []
+        market_groups = []
+        for market in _MARKETS:
+            args = {**strategy["args"], "p_market": market, **strategy.get("market_args", {}).get(market, {})}
+            try:
+                rows = await deps.db.rpc(strategy["rpc"], args)
+            except Exception:
+                logger.warning("選股策略執行失敗 %s market=%s", strategy["rpc"], market, exc_info=True)
+                rows = []
+            market_groups.append({"market": market, "picks": [strategy["format"](row) for row in rows]})
         sections.append(
-            {
-                "title": strategy["title"],
-                "desc": strategy["desc"],
-                "picks": [strategy["format"](row) for row in rows],
-                "skipped": None,
-            }
+            {"title": strategy["title"], "desc": strategy["desc"], "markets": market_groups, "skipped": None}
         )
     return {"date": datetime.now(_TAIPEI_TZ).date().isoformat(), "sections": sections}
 
 
 def has_picks(result: dict) -> bool:
-    return any(section["picks"] for section in result["sections"])
+    return any(
+        group["picks"] for section in result["sections"] for group in section["markets"]
+    )
 
 
 def format_picks_message(result: dict) -> str:
@@ -130,10 +134,13 @@ def format_picks_message(result: dict) -> str:
         lines.append(f"📋 {section['desc']}")
         if section["skipped"]:
             lines.append(f"⏳ {section['skipped']}")
-        elif section["picks"]:
-            lines += [f"・{pick}" for pick in section["picks"]]
-        else:
-            lines.append("今日無符合標的")
+            continue
+        for group in section["markets"]:
+            lines.append(f"▍{group['market']}")
+            if group["picks"]:
+                lines += [f"・{pick}" for pick in group["picks"]]
+            else:
+                lines.append("・無符合標的")
     lines.append("")
     lines.append("⚠️ 技術面策略以已累積足夠歷史的個股為母體；僅供參考，非投資建議")
     return "\n".join(lines)

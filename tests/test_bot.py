@@ -110,9 +110,11 @@ RPC_FIXTURES = {
     "institutional_streak_picks": [
         {"stock_no": "2330", "stock_name": "台積電", "foreign_streak": True, "trust_streak": False, "sum_net": 35000000},
     ],
-    "co_buy_picks": [
-        {"stock_no": "2834", "stock_name": "臺企銀", "foreign_net": 19913948, "trust_net": 8994},
-    ],
+    # dict 形式＝依 p_market 回不同結果
+    "co_buy_picks": {
+        "上市": [{"stock_no": "2834", "stock_name": "臺企銀", "foreign_net": 19913948, "trust_net": 8994}],
+        "上櫃": [{"stock_no": "6182", "stock_name": "合晶", "foreign_net": 3798360, "trust_net": 5371000}],
+    },
     "breakout_picks": [
         {"stock_no": "3231", "stock_name": "緯創", "close": 159, "high20": 150, "volume": 24768914, "avg_volume": 12000000},
     ],
@@ -241,7 +243,11 @@ class BotRuntime:
                 return httpx.Response(200, json=TPEX_INSTITUTIONAL)
             if "/rest/v1/rpc/" in url:
                 fn_name = url.split("/rest/v1/rpc/")[1].split("?")[0]
-                return httpx.Response(200, json=self.rpc_fixtures.get(fn_name, []))
+                fixture = self.rpc_fixtures.get(fn_name, [])
+                if isinstance(fixture, dict):
+                    args = json.loads(request.content) if request.content else {}
+                    fixture = fixture.get(args.get("p_market"), [])
+                return httpx.Response(200, json=fixture)
             if "/rest/v1/" in url:
                 table = url.split("/rest/v1/")[1].split("?")[0]
                 body = json.loads(request.content) if request.content else None
@@ -513,15 +519,20 @@ def test_volume_rank_command():
         assert "（-0.8%）" in reply
 
 
-def test_daily_picks_command_with_explanations():
+def test_daily_picks_split_by_market_with_explanations():
     with BotRuntime() as rt:
         rt.send("每日選股")  # 不需登入
         reply = rt.last_reply()
         assert "🎯 每日選股" in reply
         assert "【法人連買 3 日】" in reply
         assert "外資或投信連續 3 個交易日買超" in reply  # 篩選邏輯說明
-        assert "2330 台積電（外資連買，3日合計 +35,000 張）" in reply
+        assert "▍上市" in reply
+        assert "▍上櫃" in reply
+        # 上市/上櫃 各自排名：同買策略兩市場結果不同
         assert "2834 臺企銀（外資 +19,914 張、投信 +9 張）" in reply
+        assert "6182 合晶（外資 +3,798 張、投信 +5,371 張）" in reply
+        assert reply.index("臺企銀") < reply.index("合晶")
+        assert "量門檻：上市 1,000 張／上櫃 300 張" in reply
         assert "3231 緯創（收 159 創20日新高，量為均量 2.1 倍）" in reply
         assert "0050 元大台灣50（K 25 上穿 D 22）" in reply
         assert "非投資建議" in reply
