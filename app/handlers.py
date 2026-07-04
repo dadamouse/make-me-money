@@ -6,12 +6,18 @@ from urllib.parse import quote
 
 from .chart import render_kline_png
 from .deps import Deps
-from .flex import build_chart_bubble, build_chart_carousel_message, build_chart_message, build_portfolio_message
+from .flex import (
+    build_chart_bubble,
+    build_chart_carousel_message,
+    build_chart_message,
+    build_picks_message,
+    build_portfolio_message,
+)
 from .history import get_price_history
 from .indicators import compute_indicators
 from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number
 from .screener import format_picks_message, run_daily_picks
-from .webview import portfolio_sig
+from .webview import picks_sig, portfolio_sig
 
 logger = logging.getLogger(__name__)
 
@@ -441,7 +447,7 @@ async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> 
     if cmd.action == "volume_rank":  # 全市場排行，不需身份
         return await _handle_volume_rank(deps)
     if cmd.action == "picks":  # 全市場選股，不需身份
-        return format_picks_message(await run_daily_picks(deps))
+        return await _handle_picks(deps)
     member = await _get_acting_member(deps, line_user_id)
     if not member:
         return "👋 請先輸入「登入你的名字」開始使用，例如：登入dada"
@@ -468,5 +474,14 @@ async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> 
     if cmd.action == "volume_rank":
         return await _handle_volume_rank(deps)
     if cmd.action == "picks":
-        return format_picks_message(await run_daily_picks(deps))
+        return await _handle_picks(deps)
     return HELP_TEXT
+
+
+def picks_web_url(deps: Deps) -> str:
+    return f"{deps.base_url}/picks?sig={picks_sig(deps.sign_key)}"
+
+
+async def _handle_picks(deps: Deps) -> dict:
+    result = await run_daily_picks(deps)
+    return build_picks_message(result, format_picks_message(result), picks_web_url(deps))

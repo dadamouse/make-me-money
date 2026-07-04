@@ -13,7 +13,8 @@ from fastapi.responses import HTMLResponse
 from .chart import ChartStore, render_kline_png
 from .config import Settings, load_settings
 from .deps import Deps
-from .handlers import build_portfolio_entries, handle_command
+from .flex import build_picks_message
+from .handlers import build_portfolio_entries, handle_command, picks_web_url
 from .history import get_price_history
 from .line_client import LineClient, verify_signature
 from .parser import parse_command, summarize_portfolio
@@ -22,7 +23,7 @@ from .screener import format_picks_message, has_picks, run_daily_picks
 from .snapshot import run_snapshot
 from .supabase import SupabaseClient
 from .twse import TwseClient, sync_stocks
-from .webview import render_portfolio_html, verify_portfolio_sig
+from .webview import render_picks_html, render_portfolio_html, verify_picks_sig, verify_portfolio_sig
 from .weekly import build_weekly_outlook, build_weekly_report
 
 _STOCK_NO_PATTERN = re.compile(r"[0-9]{4,6}[A-Z]?")
@@ -80,6 +81,15 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         return HTMLResponse(
             render_portfolio_html(members[0]["name"], summary["items"], summary["total_value"], summary["total_pnl"])
         )
+
+    @app.get("/picks")
+    async def picks_page(request: Request, sig: str = "") -> HTMLResponse:
+        """每日選股網頁版（入選個股附技術分析圖）。"""
+        deps = request.app.state.deps
+        if not verify_picks_sig(deps.sign_key, sig):
+            raise HTTPException(status_code=403, detail="invalid signature")
+        result = await run_daily_picks(deps)
+        return HTMLResponse(render_picks_html(result))
 
     @app.get("/stock-chart/{stock_no}.png")
     async def stock_chart_image(stock_no: str, request: Request) -> Response:
@@ -205,7 +215,8 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             bindings = await deps.db.get("line_bindings?select=line_user_id")
             user_ids = [b["line_user_id"] for b in bindings]
             if user_ids:
-                await request.app.state.line.multicast(user_ids, format_picks_message(result))
+                message = build_picks_message(result, format_picks_message(result), picks_web_url(deps))
+                await request.app.state.line.multicast(user_ids, message)
                 pushed = len(user_ids)
         logger.info("每日選股完成 pushed=%s", pushed)
         return {"ok": True, "pushed": pushed, "date": result["date"]}

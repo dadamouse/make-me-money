@@ -18,50 +18,42 @@ def _lots(shares: float) -> str:
     return f"{'+' if value >= 0 else ''}{format_number(value)}"
 
 
-def _format_streak(row: dict) -> str:
+def _pick(row: dict, detail: str) -> dict:
+    return {"stock_no": str(row["stock_no"]), "name": row.get("stock_name") or "", "detail": detail}
+
+
+def _format_streak(row: dict) -> dict:
     who = "、".join(
         label for label, hit in (("外資", row.get("foreign_streak")), ("投信", row.get("trust_streak"))) if hit
     )
-    return f"{row['stock_no']} {row.get('stock_name') or ''}（{who}連買，{_STREAK_DAYS}日合計 {_lots(row['sum_net'])} 張）"
+    return _pick(row, f"{who}連買，{_STREAK_DAYS}日合計 {_lots(row['sum_net'])} 張")
 
 
-def _format_co_buy(row: dict) -> str:
-    return (
-        f"{row['stock_no']} {row.get('stock_name') or ''}"
-        f"（外資 {_lots(row['foreign_net'])} 張、投信 {_lots(row['trust_net'])} 張）"
-    )
+def _format_co_buy(row: dict) -> dict:
+    return _pick(row, f"外資 {_lots(row['foreign_net'])} 張、投信 {_lots(row['trust_net'])} 張")
 
 
-def _format_breakout(row: dict) -> str:
+def _format_breakout(row: dict) -> dict:
     ratio = float(row["volume"]) / float(row["avg_volume"]) if float(row["avg_volume"]) else 0
-    return (
-        f"{row['stock_no']} {row.get('stock_name') or ''}"
-        f"（收 {format_number(float(row['close']))} 創20日新高，量為5日均量 {ratio:.1f} 倍）"
-    )
+    return _pick(row, f"收 {format_number(float(row['close']))} 創20日新高，量為5日均量 {ratio:.1f} 倍")
 
 
-def _format_kd(row: dict) -> str:
-    return (
-        f"{row['stock_no']} {row.get('stock_name') or ''}"
-        f"（K {float(row['k_val']):.0f} 上穿 D {float(row['d_val']):.0f}）"
-    )
+def _format_kd(row: dict) -> dict:
+    return _pick(row, f"K {float(row['k_val']):.0f} 上穿 D {float(row['d_val']):.0f}")
 
 
-def _format_margin_reduce(row: dict) -> str:
+def _format_margin_reduce(row: dict) -> dict:
     close = float(row["close"])
     prev_close = float(row["prev_close"])
     pct = (close - prev_close) / prev_close * 100
-    return (
-        f"{row['stock_no']} {row.get('stock_name') or ''}"
-        f"（融資 {format_number(float(row['margin_change']))} 張、股價 +{pct:.1f}%）"
-    )
+    return _pick(row, f"融資 {format_number(float(row['margin_change']))} 張、股價 +{pct:.1f}%")
 
 
-def _format_short_ratio(row: dict) -> str:
-    return (
-        f"{row['stock_no']} {row.get('stock_name') or ''}"
-        f"（券資比 {float(row['ratio']):.1f}%，融券 {format_number(float(row['short_balance']))} 張"
-        f"／融資 {format_number(float(row['margin_balance']))} 張）"
+def _format_short_ratio(row: dict) -> dict:
+    return _pick(
+        row,
+        f"券資比 {float(row['ratio']):.1f}%，融券 {format_number(float(row['short_balance']))} 張"
+        f"／融資 {format_number(float(row['margin_balance']))} 張",
     )
 
 
@@ -168,6 +160,7 @@ def has_picks(result: dict) -> bool:
 
 
 def format_picks_message(result: dict) -> str:
+    """純文字版（flex 的 altText 與備援用）。"""
     lines = [f"🎯 每日選股（{result['date'][5:].replace('-', '/')}）"]
     for section in result["sections"]:
         lines.append("")
@@ -179,7 +172,7 @@ def format_picks_message(result: dict) -> str:
         for group in section["markets"]:
             lines.append(f"▍{group['market']}")
             if group["picks"]:
-                lines += [f"・{pick}" for pick in group["picks"]]
+                lines += [f"・{p['stock_no']} {p['name']}（{p['detail']}）" for p in group["picks"]]
             else:
                 lines.append("・無符合標的")
     lines.append("")

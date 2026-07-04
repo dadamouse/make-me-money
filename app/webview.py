@@ -15,6 +15,14 @@ def verify_portfolio_sig(member_id: int, sign_key: str, provided: str | None) ->
     return bool(provided) and hmac.compare_digest(portfolio_sig(member_id, sign_key), provided)
 
 
+def picks_sig(sign_key: str) -> str:
+    return hmac.new(sign_key.encode(), b"daily-picks", hashlib.sha256).hexdigest()[:16]
+
+
+def verify_picks_sig(sign_key: str, provided: str | None) -> bool:
+    return bool(provided) and hmac.compare_digest(picks_sig(sign_key), provided)
+
+
 _CSS = """
 body{font-family:-apple-system,'Noto Sans TC',sans-serif;background:#f2f4f8;margin:0;padding:16px;color:#333}
 h1{font-size:20px;margin:8px 4px 16px}
@@ -109,6 +117,42 @@ def _stock_card(entry: dict) -> str:
         f"{price_html}<table>{''.join(rows)}</table>"
         f"<img class='chart' loading='lazy' src='/stock-chart/{escape(entry['stock_no'])}.png' alt='技術分析圖'></div>"
     )
+
+
+def _pick_card(pick: dict) -> str:
+    return (
+        f"<div class='card'><h2>{escape(pick['stock_no'])} {escape(pick['name'])}</h2>"
+        f"<div class='muted'>{escape(pick['detail'])}</div>"
+        f"<img class='chart' loading='lazy' src='/stock-chart/{escape(pick['stock_no'])}.png' alt='技術分析圖'></div>"
+    )
+
+
+def render_picks_html(result: dict) -> str:
+    """每日選股網頁版：每個策略一節，入選個股附技術分析圖。"""
+    sections_html = []
+    for section in result["sections"]:
+        parts = [f"<div class='summary'><div class='total'>🎯 {escape(section['title'])}</div>"]
+        parts.append(f"<div style='color:#B8C4E0;font-size:13px'>{escape(section['desc'])}</div></div>")
+        if section["skipped"]:
+            parts.append(f"<div class='card muted'>⏳ {escape(section['skipped'])}</div>")
+        else:
+            for group in section["markets"]:
+                parts.append(f"<h1>▍{escape(group['market'])}</h1>")
+                if group["picks"]:
+                    parts += [_pick_card(pick) for pick in group["picks"]]
+                else:
+                    parts.append("<div class='card muted'>無符合標的</div>")
+        sections_html.append("".join(parts))
+    return f"""<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>每日選股 {escape(result['date'])}</title><style>{_CSS}</style></head>
+<body>
+<h1>🎯 每日選股（{escape(result['date'])}）</h1>
+{''.join(sections_html)}
+<footer>僅供參考，非投資建議・make-me-money</footer>
+</body></html>"""
 
 
 def render_portfolio_html(member_name: str, entries: list[dict], total_value: float, total_pnl: float | None) -> str:

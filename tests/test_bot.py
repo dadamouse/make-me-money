@@ -525,36 +525,42 @@ def test_volume_rank_command():
         assert "（-0.8%）" in reply
 
 
-def test_daily_picks_split_by_market_with_explanations():
+def test_daily_picks_flex_carousel():
     with BotRuntime() as rt:
         rt.send("每日選股")  # 不需登入
-        reply = rt.last_reply()
-        assert "🎯 每日選股" in reply
-        assert "【法人連買 3 日】" in reply
-        assert "外資或投信連續 3 個交易日買超" in reply  # 篩選邏輯說明
-        assert "▍上市" in reply
-        assert "▍上櫃" in reply
-        # 上市/上櫃 各自排名：同買策略兩市場結果不同
-        assert "2834 臺企銀（外資 +19,914 張、投信 +9 張）" in reply
-        assert "6182 合晶（外資 +3,798 張、投信 +5,371 張）" in reply
-        assert reply.index("臺企銀") < reply.index("合晶")
-        assert "上市 >5日均量 3 倍（保底 1,000 張）／上櫃 >5日均量 10 倍（保底 300 張）" in reply
-        assert "3231 緯創（收 159 創20日新高，量為5日均量 2.1 倍）" in reply
-        assert "0050 元大台灣50（K 25 上穿 D 22）" in reply
-        assert "【融資減、價格漲】" in reply
-        assert "2609 陽明（融資 -1,520 張、股價 +2.1%）" in reply
-        assert "【高券資比】" in reply
-        assert "2353 宏碁（券資比 33.2%，融券 14,221 張／融資 42,781 張）" in reply
-        assert "非投資建議" in reply
+        message = rt.last_message()
+        assert message["type"] == "flex"
+        assert "🎯 每日選股" in message["altText"]
+        carousel = message["contents"]
+        assert carousel["type"] == "carousel"
+        assert len(carousel["contents"]) == 6  # 六個策略各一張卡片
+        content = json.dumps(carousel, ensure_ascii=False)
+        assert "法人連買 3 日" in content
+        assert "外資或投信連續 3 個交易日買超" in content  # 篩選邏輯說明
+        assert "▍上市" in content
+        assert "▍上櫃" in content
+        # 上市/上櫃各自排名：同買策略兩市場結果不同
+        assert "2834 臺企銀" in content
+        assert "外資 +19,914 張、投信 +9 張" in content
+        assert "6182 合晶" in content
+        assert content.index("臺企銀") < content.index("合晶")
+        assert "收 159 創20日新高，量為5日均量 2.1 倍" in content
+        assert "K 25 上穿 D 22" in content
+        assert "融資 -1,520 張、股價 +2.1%" in content
+        assert "券資比 33.2%" in content
+        # 點個股 → 自動送出「圖XXXX」
+        assert '"text": "圖2834"' in content
+        # 網頁版按鈕
+        assert "/picks?sig=" in content
 
 
 def test_daily_picks_skips_strategies_without_data():
     with BotRuntime(rpc_overrides={"snapshot_depth": [{"insti_days": 1, "close_days": 10}]}) as rt:
         rt.send("選股")
-        reply = rt.last_reply()
-        assert "⏳ 資料累積中（需 3 個交易日，目前 1）" in reply  # 法人連買 skip
-        assert "⏳ 資料累積中（需 21 個交易日，目前 10）" in reply  # 突破 skip
-        assert "2834 臺企銀" in reply  # 同買仍可跑
+        content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
+        assert "資料累積中（需 3 個交易日，目前 1）" in content  # 法人連買 skip
+        assert "資料累積中（需 21 個交易日，目前 10）" in content  # 突破 skip
+        assert "2834 臺企銀" in content  # 同買仍可跑
 
 
 def test_daily_picks_push_endpoint():
@@ -567,9 +573,22 @@ def test_daily_picks_push_endpoint():
         assert payload["pushed"] == 1
         push = rt.replies[-1]
         assert push["to"] == ["U-test"]
-        assert "🎯 每日選股" in push["messages"][0]["text"]
+        assert push["messages"][0]["type"] == "flex"
+        assert "🎯 每日選股" in push["messages"][0]["altText"]
 
         assert rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "wrong"}).status_code == 403
+
+
+def test_picks_web_page():
+    with BotRuntime() as rt:
+        from app.webview import picks_sig
+
+        page = rt.client.get(f"/picks?sig={picks_sig('channel-secret')}")
+        assert page.status_code == 200
+        assert "每日選股" in page.text
+        assert "法人連買 3 日" in page.text
+        assert "/stock-chart/2834.png" in page.text
+        assert rt.client.get("/picks?sig=bogus").status_code == 403
 
 
 def test_backfill_history_endpoint():

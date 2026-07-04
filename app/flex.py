@@ -223,6 +223,74 @@ def build_chart_message(stock: dict, image_url: str, close: float | None, indica
     }
 
 
+_PICK_HEADER_COLORS = ("#27346A", "#00695C", "#B26A00", "#6A1B9A", "#AD1457", "#37474F")
+
+
+def _picks_group_rows(group: dict) -> list[dict]:
+    rows = [_text(f"▍{group['market']}", size="xs", weight="bold", color=INDUSTRY_COLOR, margin="md")]
+    if not group["picks"]:
+        rows.append(_text("無符合標的", size="xs", color=MUTED_COLOR))
+        return rows
+    for pick in group["picks"]:
+        rows.append(
+            {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "none",
+                "margin": "sm",
+                "action": {"type": "message", "label": pick["stock_no"], "text": f"圖{pick['stock_no']}"},
+                "contents": [
+                    _text(f"{pick['stock_no']} {pick['name']}", size="sm", weight="bold", color=TITLE_COLOR),
+                    _text(pick["detail"], size="xxs", color=MUTED_COLOR, wrap=True),
+                ],
+            }
+        )
+    return rows
+
+
+def _picks_strategy_bubble(section: dict, index: int, date_label: str, web_url: str | None) -> dict:
+    header_color = _PICK_HEADER_COLORS[index % len(_PICK_HEADER_COLORS)]
+    header = {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": header_color,
+        "paddingAll": "14px",
+        "contents": [
+            _text(f"🎯 {section['title']}", size="md", weight="bold", color="#FFFFFF"),
+            _text(f"{date_label}｜{section['desc']}", size="xxs", color="#D5DBEA", wrap=True, margin="xs"),
+        ],
+    }
+    if section["skipped"]:
+        body_rows = [_text(f"⏳ {section['skipped']}", size="xs", color=MUTED_COLOR, wrap=True)]
+    else:
+        body_rows = []
+        for group in section["markets"]:
+            body_rows += _picks_group_rows(group)
+        body_rows.append(_text("點個股可看技術分析圖", size="xxs", color="#BDBDBD", margin="lg"))
+    bubble = {
+        "type": "bubble",
+        "size": "mega",
+        "header": header,
+        "body": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": body_rows},
+    }
+    if web_url:
+        bubble["footer"] = {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [_link_button(web_url, "🔗 網頁版完整檢視（含線圖）")],
+        }
+    return bubble
+
+
+def build_picks_message(result: dict, alt_text: str, web_url: str | None = None) -> dict:
+    """每日選股 Flex：每個策略一張卡片的 carousel，個股點擊可看線圖。"""
+    date_label = result["date"][5:].replace("-", "/")
+    bubbles = [
+        _picks_strategy_bubble(section, i, date_label, web_url) for i, section in enumerate(result["sections"])
+    ]
+    return {"type": "flex", "altText": alt_text[:400], "contents": {"type": "carousel", "contents": bubbles}}
+
+
 def build_chart_carousel_message(member_name: str, bubbles: list[dict]) -> dict:
     """多檔持股線圖 carousel（LINE 上限 12 個 bubble；carousel 內不可用 giga）。"""
     return {
