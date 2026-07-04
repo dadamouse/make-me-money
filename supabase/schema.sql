@@ -135,11 +135,12 @@ $$;
 
 -- 資料深度：各表累積了幾個交易日（判斷策略是否可用）
 create or replace function snapshot_depth()
-returns table (insti_days bigint, close_days bigint)
+returns table (insti_days bigint, close_days bigint, margin_days bigint)
 language sql stable as $$
   select
     (select count(distinct trade_date) from daily_institutional),
-    (select count(distinct trade_date) from daily_closes)
+    (select count(distinct trade_date) from daily_closes),
+    (select count(distinct trade_date) from daily_margins)
 $$;
 
 -- 策略一：法人連買 N 日（外資或投信連續買超，依合計買超排序）
@@ -264,5 +265,65 @@ language sql stable as $$
     and y.kv < 30
     and (p_market is null or s.market = p_market)
   order by t.kv - t.dv desc
+  limit limit_n
+$$;
+
+-- 策略五：融資減、價格漲（最新交易日融資減少且股價上漲，散戶籌碼退場）
+create or replace function margin_reduce_price_up_picks(
+  limit_n int default 5,
+  p_market text default null,
+  min_reduce numeric default 100
+)
+returns table (stock_no text, stock_name text, margin_change numeric, close numeric, prev_close numeric)
+language sql stable as $$
+  with ranked_m as (
+    select dm.stock_no, dm.margin_change,
+           row_number() over (partition by dm.stock_no order by dm.trade_date desc) as rn
+    from daily_margins dm
+    where dm.trade_date >= current_date - 7 and dm.margin_change is not null
+  ),
+  m as (select * from ranked_m where rn = 1),
+  ranked_c as (
+    select dc.stock_no, dc.close,
+           lag(dc.close) over (partition by dc.stock_no order by dc.trade_date) as prev_close,
+           row_number() over (partition by dc.stock_no order by dc.trade_date desc) as rn
+    from daily_closes dc
+    where dc.trade_date >= current_date - 14
+  ),
+  c as (select * from ranked_c where rn = 1 and prev_close is not null)
+  select m.stock_no, s.name, m.margin_change, c.close, c.prev_close
+  from m
+  join c on c.stock_no = m.stock_no
+  left join stocks s on s.stock_no = m.stock_no
+  where m.margin_change <= -min_reduce
+    and c.close > c.prev_close
+    and (p_market is null or s.market = p_market)
+  order by m.margin_change asc
+  limit limit_n
+$$;
+
+-- 策略六：高券資比（融券餘額／融資餘額，軋空潛力；融資餘額需達門檻避免失真）
+create or replace function short_margin_ratio_picks(
+  limit_n int default 5,
+  p_market text default null,
+  min_margin numeric default 1000
+)
+returns table (stock_no text, stock_name text, short_balance numeric, margin_balance numeric, ratio numeric)
+language sql stable as $$
+  with ranked_m as (
+    select dm.*,
+           row_number() over (partition by dm.stock_no order by dm.trade_date desc) as rn
+    from daily_margins dm
+    where dm.trade_date >= current_date - 7
+  )
+  select dm.stock_no, s.name, dm.short_balance, dm.margin_balance,
+         round(dm.short_balance / dm.margin_balance * 100, 1)
+  from ranked_m dm
+  left join stocks s on s.stock_no = dm.stock_no
+  where dm.rn = 1
+    and dm.margin_balance >= min_margin
+    and dm.short_balance is not null and dm.short_balance > 0
+    and (p_market is null or s.market = p_market)
+  order by dm.short_balance / dm.margin_balance desc
   limit limit_n
 $$;

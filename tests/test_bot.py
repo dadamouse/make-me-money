@@ -106,7 +106,13 @@ VOLUME_RANK = [
 
 RPC_FIXTURES = {
     "volume_surge_ranking": VOLUME_RANK,
-    "snapshot_depth": [{"insti_days": 3, "close_days": 25}],
+    "snapshot_depth": [{"insti_days": 3, "close_days": 25, "margin_days": 2}],
+    "margin_reduce_price_up_picks": [
+        {"stock_no": "2609", "stock_name": "陽明", "margin_change": -1520, "close": 71.5, "prev_close": 70.0},
+    ],
+    "short_margin_ratio_picks": [
+        {"stock_no": "2353", "stock_name": "宏碁", "short_balance": 14221, "margin_balance": 42781, "ratio": 33.2},
+    ],
     "institutional_streak_picks": [
         {"stock_no": "2330", "stock_name": "台積電", "foreign_streak": True, "trust_streak": False, "sum_net": 35000000},
     ],
@@ -535,6 +541,10 @@ def test_daily_picks_split_by_market_with_explanations():
         assert "上市 >5日均量 3 倍（保底 1,000 張）／上櫃 >5日均量 10 倍（保底 300 張）" in reply
         assert "3231 緯創（收 159 創20日新高，量為5日均量 2.1 倍）" in reply
         assert "0050 元大台灣50（K 25 上穿 D 22）" in reply
+        assert "【融資減、價格漲】" in reply
+        assert "2609 陽明（融資 -1,520 張、股價 +2.1%）" in reply
+        assert "【高券資比】" in reply
+        assert "2353 宏碁（券資比 33.2%，融券 14,221 張／融資 42,781 張）" in reply
         assert "非投資建議" in reply
 
 

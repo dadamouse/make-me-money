@@ -47,6 +47,24 @@ def _format_kd(row: dict) -> str:
     )
 
 
+def _format_margin_reduce(row: dict) -> str:
+    close = float(row["close"])
+    prev_close = float(row["prev_close"])
+    pct = (close - prev_close) / prev_close * 100
+    return (
+        f"{row['stock_no']} {row.get('stock_name') or ''}"
+        f"（融資 {format_number(float(row['margin_change']))} 張、股價 +{pct:.1f}%）"
+    )
+
+
+def _format_short_ratio(row: dict) -> str:
+    return (
+        f"{row['stock_no']} {row.get('stock_name') or ''}"
+        f"（券資比 {float(row['ratio']):.1f}%，融券 {format_number(float(row['short_balance']))} 張"
+        f"／融資 {format_number(float(row['margin_balance']))} 張）"
+    )
+
+
 _STRATEGIES = (
     {
         "title": f"法人連買 {_STREAK_DAYS} 日",
@@ -87,6 +105,26 @@ _STRATEGIES = (
         "depth_key": "close_days",
         "min_depth": 15,
         "format": _format_kd,
+    },
+    {
+        "title": "融資減、價格漲",
+        "desc": "最新交易日融資減少且股價上漲（散戶籌碼退場、籌碼轉強）；減幅門檻：上市 500 張／上櫃 100 張",
+        "rpc": "margin_reduce_price_up_picks",
+        "args": {"limit_n": _LIMIT},
+        "market_args": {"上市": {"min_reduce": 500}, "上櫃": {"min_reduce": 100}},
+        "depth_key": "margin_days",
+        "min_depth": 1,
+        "format": _format_margin_reduce,
+    },
+    {
+        "title": "高券資比",
+        "desc": "融券餘額÷融資餘額最高（軋空潛力）；融資餘額門檻：上市 1,000 張／上櫃 300 張",
+        "rpc": "short_margin_ratio_picks",
+        "args": {"limit_n": _LIMIT},
+        "market_args": {"上市": {"min_margin": 1000}, "上櫃": {"min_margin": 300}},
+        "depth_key": "margin_days",
+        "min_depth": 1,
+        "format": _format_short_ratio,
     },
 )
 
