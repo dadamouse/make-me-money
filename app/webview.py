@@ -115,7 +115,20 @@ def _stock_card(entry: dict) -> str:
     return (
         f"<div class='card'><h2>{name}<span class='tag'>{escape(tags)}</span></h2>"
         f"{price_html}<table>{''.join(rows)}</table>"
-        f"<img class='chart' loading='lazy' src='/stock-chart/{escape(entry['stock_no'])}.png' alt='技術分析圖'></div>"
+        f"{_chart_img(entry['stock_no'])}</div>"
+    )
+
+
+_CHART_FALLBACK = (
+    "onerror=\"this.outerHTML='<div class=&quot;muted&quot; style=&quot;padding:12px&quot;>"
+    "⏳ 歷史資料回補中，圖表稍後才會出現（背景任務進行中）</div>'\""
+)
+
+
+def _chart_img(stock_no: str) -> str:
+    return (
+        f"<img class='chart' loading='lazy' src='/stock-chart/{escape(stock_no)}.png' "
+        f"alt='技術分析圖' {_CHART_FALLBACK}>"
     )
 
 
@@ -123,7 +136,7 @@ def _pick_card(pick: dict) -> str:
     return (
         f"<div class='card'><h2>{escape(pick['stock_no'])} {escape(pick['name'])}</h2>"
         f"<div class='muted'>{escape(pick['detail'])}</div>"
-        f"<img class='chart' loading='lazy' src='/stock-chart/{escape(pick['stock_no'])}.png' alt='技術分析圖'></div>"
+        f"{_chart_img(pick['stock_no'])}</div>"
     )
 
 

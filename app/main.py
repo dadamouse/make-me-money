@@ -82,6 +82,31 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             render_portfolio_html(members[0]["name"], summary["items"], summary["total_value"], summary["total_pnl"])
         )
 
+    def _prefetch_pick_charts(request: Request, result: dict) -> None:
+        """背景優先回補入選股的歷史（讓選股網頁的圖表儘快可用）。"""
+        deps = request.app.state.deps
+        codes = sorted(
+            {
+                pick["stock_no"]
+                for section in result["sections"]
+                for group in section.get("markets", [])
+                for pick in group["picks"]
+            }
+        )
+        if not codes:
+            return
+
+        async def run() -> None:
+            rows = await deps.db.get(f"stocks?stock_no=in.({','.join(codes)})&select=stock_no,market")
+            market_map = {r["stock_no"]: r.get("market") for r in rows}
+            for code in codes:
+                try:
+                    await get_price_history(deps.db, deps.twse, code, market_map.get(code))
+                except Exception:
+                    logger.warning("入選股回補失敗 stock_no=%s", code, exc_info=True)
+
+        request.app.state.prefetch_task = asyncio.create_task(run())
+
     @app.get("/picks")
     async def picks_page(request: Request, sig: str = "") -> HTMLResponse:
         """每日選股網頁版（入選個股附技術分析圖）。"""
@@ -89,6 +114,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         if not verify_picks_sig(deps.sign_key, sig):
             raise HTTPException(status_code=403, detail="invalid signature")
         result = await run_daily_picks(deps)
+        _prefetch_pick_charts(request, result)
         return HTMLResponse(render_picks_html(result))
 
     @app.get("/stock-chart/{stock_no}.png")
@@ -218,6 +244,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
                 message = build_picks_message(result, format_picks_message(result), picks_web_url(deps))
                 await request.app.state.line.multicast(user_ids, message)
                 pushed = len(user_ids)
+                _prefetch_pick_charts(request, result)  # 推播後先把入選股的圖備好
         logger.info("每日選股完成 pushed=%s", pushed)
         return {"ok": True, "pushed": pushed, "date": result["date"]}
 
