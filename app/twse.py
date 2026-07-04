@@ -1,4 +1,5 @@
 """TWSE（上市）與 TPEx（上櫃）API：收盤價查詢與公司對照表同步。"""
+import asyncio
 import logging
 import time
 from datetime import date, timedelta
@@ -32,6 +33,23 @@ _ETF_CODE_PREFIX = "00"
 
 _SYNC_CHUNK_SIZE = 500
 _TPEX_QUOTES_TTL_SECONDS = 600
+_TWSE_THROTTLE_SECONDS = 1.8  # www.twse.com.tw 限制約 3 req/5s，保守間隔避免被鎖 IP
+_TPEX_THROTTLE_SECONDS = 1.0
+
+
+class _Throttle:
+    """串行化並強制最小間隔的節流器（對嚴格限流的網域用）。"""
+
+    def __init__(self):
+        self._lock = asyncio.Lock()
+        self._last = 0.0
+
+    async def wait(self, interval: float) -> None:
+        async with self._lock:
+            delay = interval - (time.monotonic() - self._last)
+            if delay > 0:
+                await asyncio.sleep(delay)
+            self._last = time.monotonic()
 
 # 「產業別」代碼對照（TWSE t187ap03_L 與 TPEx mopsfin_t187ap03_O 共用同一套代碼）
 INDUSTRY_NAMES = {
@@ -51,6 +69,8 @@ class TwseClient:
     def __init__(self, http: httpx.AsyncClient):
         self._http = http
         self._tpex_quotes_cache: tuple[float, list] | None = None
+        self._twse_throttle = _Throttle()
+        self._tpex_throttle = _Throttle()
 
     async def fetch_close(self, stock_no: str, market: str | None = None) -> dict | None:
         """依市場別查收盤價；市場未知（如 ETF）時先試上市、再試上櫃。"""
@@ -66,6 +86,7 @@ class TwseClient:
         month_start = date.today().replace(day=1)
         for _ in range(2):
             try:
+                await self._twse_throttle.wait(_TWSE_THROTTLE_SECONDS)
                 response = await self._http.get(
                     STOCK_DAY_URL,
                     params={"response": "json", "date": month_start.strftime("%Y%m%d"), "stockNo": stock_no},
@@ -134,6 +155,7 @@ class TwseClient:
 
     async def fetch_listed_institutional(self, yyyymmdd: str) -> dict:
         """TWSE T86 三大法人買賣超（指定日期，非交易日回 stat != OK）。"""
+        await self._twse_throttle.wait(_TWSE_THROTTLE_SECONDS)
         response = await self._http.get(
             LISTED_INSTITUTIONAL_URL,
             params={"date": yyyymmdd, "selectType": "ALLBUT0999", "response": "json"},
@@ -149,6 +171,7 @@ class TwseClient:
 
     async def fetch_listed_month(self, stock_no: str, year: int, month: int) -> dict:
         """TWSE STOCK_DAY 單檔整月（含開高低收與成交量）。"""
+        await self._twse_throttle.wait(_TWSE_THROTTLE_SECONDS)
         response = await self._http.get(
             STOCK_DAY_URL,
             params={"response": "json", "date": f"{year}{month:02d}01", "stockNo": stock_no},
@@ -158,6 +181,7 @@ class TwseClient:
 
     async def fetch_otc_month(self, stock_no: str, year: int, month: int) -> dict:
         """TPEx tradingStock 單檔整月。"""
+        await self._tpex_throttle.wait(_TPEX_THROTTLE_SECONDS)
         response = await self._http.get(
             TPEX_STOCK_MONTH_URL,
             params={"code": stock_no, "date": f"{year}/{month:02d}/01", "response": "json"},

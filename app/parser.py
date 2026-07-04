@@ -86,9 +86,11 @@ def parse_twse_close(api_json: dict | None) -> dict | None:
 
 
 def format_roc_date(roc_date: str | None) -> str:
-    """民國日期 '115/07/02' → 顯示用 '07/02'。"""
-    parts = str(roc_date or "").split("/")
-    return f"{parts[1]}/{parts[2]}" if len(parts) == 3 else str(roc_date or "")
+    """民國日期 '115/07/02' 或 ISO '2026-07-02' → 顯示用 '07/02'。"""
+    s = str(roc_date or "")
+    separator = "-" if "-" in s else "/"
+    parts = s.split(separator)
+    return f"{parts[1]}/{parts[2]}" if len(parts) == 3 else s
 
 
 def format_roc_compact(compact: str | None) -> str:

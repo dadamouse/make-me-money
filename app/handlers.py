@@ -200,18 +200,24 @@ async def build_portfolio_entries(deps: Deps, member: dict) -> list[dict]:
     for agg in aggregated:
         info = info_map.get(agg["stock_no"], {})
         indicators = None
+        history = []
         try:
             history = await get_price_history(deps.db, deps.twse, agg["stock_no"], info.get("market"))
             indicators = compute_indicators(history)
         except Exception:
             logger.warning("技術指標計算失敗 stock_no=%s", agg["stock_no"], exc_info=True)
+        # 收盤價優先用自家資料庫（每日快照累積），避免逐檔打 TWSE 觸發限流
+        if history:
+            latest_quote = {"date": history[-1]["trade_date"], "close": history[-1]["close"]}
+        else:
+            latest_quote = await deps.twse.fetch_close(agg["stock_no"], info.get("market"))
         entries.append(
             {
                 **agg,
                 "name": info.get("name", agg["stock_no"]),
                 "industry": info.get("industry"),
                 "market": info.get("market"),
-                "quote": await deps.twse.fetch_close(agg["stock_no"], info.get("market")),
+                "quote": latest_quote,
                 "indicators": indicators,
                 "margin": margin_map.get(agg["stock_no"]),
                 "institutional": institutional_map.get(agg["stock_no"]),
