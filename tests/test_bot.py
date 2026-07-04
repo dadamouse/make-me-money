@@ -572,6 +572,27 @@ def test_daily_picks_push_endpoint():
         assert rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "wrong"}).status_code == 403
 
 
+def test_backfill_history_endpoint():
+    with BotRuntime() as rt:
+        assert rt.client.post("/admin/backfill-history", headers={"x-cron-secret": "wrong"}).status_code == 403
+        response = rt.client.post("/admin/backfill-history", headers={"x-cron-secret": "cron-secret"})
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["ok"] is True
+        assert payload["total"] == 7  # 對照表中的全部股票
+        # 背景任務在事件迴圈執行緒中進行；用 GET 輪詢進度（不會重新觸發）
+        import time as _time
+
+        status = payload
+        for _ in range(100):
+            _time.sleep(0.05)
+            status = rt.client.get("/admin/backfill-history", headers={"x-cron-secret": "cron-secret"}).json()
+            if not status.get("running"):
+                break
+        assert status["running"] is False
+        assert status["done"] == status["total"] == 7
+
+
 def test_requires_login_and_shows_help():
     with BotRuntime() as rt:
         rt.send("我的股票")

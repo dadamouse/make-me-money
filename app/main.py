@@ -1,4 +1,5 @@
 """FastAPI 入口：LINE webhook、健康檢查、每日快照端點、網頁版持股頁、啟動時同步股票對照表。"""
+import asyncio
 import hmac
 import json
 import logging
@@ -96,6 +97,48 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             png = render_kline_png(history, f"{stock_no} {stock['name']}")
             deps.charts.put(png, key=cache_key)
         return Response(content=png, media_type="image/png")
+
+    @app.get("/admin/backfill-history")
+    async def backfill_history_status(request: Request) -> dict:
+        """查詢背景回補進度（不觸發）。"""
+        secret = request.app.state.settings.cron_secret
+        provided = request.headers.get("x-cron-secret", "")
+        if not secret or not hmac.compare_digest(secret, provided):
+            raise HTTPException(status_code=403, detail="invalid cron secret")
+        default = {"running": False, "total": 0, "done": 0, "errors": 0}
+        return {"ok": True, **getattr(request.app.state, "backfill_status", default)}
+
+    @app.post("/admin/backfill-history")
+    async def backfill_history(request: Request) -> dict:
+        """背景回補全市場歷史價（受節流器保護、可中斷重跑：已足夠的個股會跳過）。"""
+        secret = request.app.state.settings.cron_secret
+        provided = request.headers.get("x-cron-secret", "")
+        if not secret or not hmac.compare_digest(secret, provided):
+            raise HTTPException(status_code=403, detail="invalid cron secret")
+        state = request.app.state
+        status = getattr(state, "backfill_status", None)
+        if status and status.get("running"):
+            return {"ok": True, **status}
+        deps = state.deps
+        stocks = await deps.db.get("stocks?select=stock_no,market&order=stock_no")
+        state.backfill_status = {"running": True, "total": len(stocks), "done": 0, "errors": 0}
+
+        async def run() -> None:
+            for stock in stocks:
+                try:
+                    await get_price_history(deps.db, deps.twse, stock["stock_no"], stock.get("market"))
+                except Exception:
+                    state.backfill_status["errors"] += 1
+                    logger.warning("歷史回補失敗 stock_no=%s", stock["stock_no"], exc_info=True)
+                state.backfill_status["done"] += 1
+                if state.backfill_status["done"] % 100 == 0:
+                    logger.info("歷史回補進度 %s", state.backfill_status)
+            state.backfill_status["running"] = False
+            logger.info("歷史回補完成 %s", state.backfill_status)
+
+        # 保留 task 引用避免被 GC（asyncio.create_task 的已知陷阱）
+        state.backfill_task = asyncio.create_task(run())
+        return {"ok": True, "started": True, **state.backfill_status}
 
     @app.post("/admin/daily-picks")
     async def daily_picks(request: Request) -> dict:
