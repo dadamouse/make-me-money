@@ -23,6 +23,7 @@ from .snapshot import run_snapshot
 from .supabase import SupabaseClient
 from .twse import TwseClient, sync_stocks
 from .webview import render_portfolio_html, verify_portfolio_sig
+from .weekly import build_weekly_outlook, build_weekly_report
 
 _STOCK_NO_PATTERN = re.compile(r"[0-9]{4,6}[A-Z]?")
 
@@ -98,27 +99,17 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             deps.charts.put(png, key=cache_key)
         return Response(content=png, media_type="image/png")
 
-    @app.get("/admin/backfill-history")
-    async def backfill_history_status(request: Request) -> dict:
-        """查詢背景回補進度（不觸發）。"""
+    def _check_cron_secret(request: Request) -> None:
         secret = request.app.state.settings.cron_secret
         provided = request.headers.get("x-cron-secret", "")
         if not secret or not hmac.compare_digest(secret, provided):
             raise HTTPException(status_code=403, detail="invalid cron secret")
-        default = {"running": False, "total": 0, "done": 0, "errors": 0}
-        return {"ok": True, **getattr(request.app.state, "backfill_status", default)}
 
-    @app.post("/admin/backfill-history")
-    async def backfill_history(request: Request) -> dict:
-        """背景回補全市場歷史價（受節流器保護、可中斷重跑：已足夠的個股會跳過）。"""
-        secret = request.app.state.settings.cron_secret
-        provided = request.headers.get("x-cron-secret", "")
-        if not secret or not hmac.compare_digest(secret, provided):
-            raise HTTPException(status_code=403, detail="invalid cron secret")
+    async def _start_backfill(request: Request) -> dict:
         state = request.app.state
         status = getattr(state, "backfill_status", None)
         if status and status.get("running"):
-            return {"ok": True, **status}
+            return status
         deps = state.deps
         # Supabase 單次查詢上限 1000 列，分頁撈全表
         stocks: list[dict] = []
@@ -147,7 +138,58 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
 
         # 保留 task 引用避免被 GC（asyncio.create_task 的已知陷阱）
         state.backfill_task = asyncio.create_task(run())
-        return {"ok": True, "started": True, **state.backfill_status}
+        return state.backfill_status
+
+    async def _push_personal(request: Request, builder) -> int:
+        """對每位已綁定成員，各自產生內容並推播。"""
+        deps = request.app.state.deps
+        bindings = await deps.db.get("line_bindings?select=line_user_id,member_id")
+        pushed = 0
+        for binding in bindings:
+            if not binding.get("member_id"):
+                continue
+            members = await deps.db.get(f"members?id=eq.{binding['member_id']}&select=id,name")
+            if not members:
+                continue
+            text = await builder(deps, members[0])
+            if not text:
+                continue
+            try:
+                await request.app.state.line.push(binding["line_user_id"], text)
+                pushed += 1
+            except httpx.HTTPError:
+                logger.warning("推播失敗 user=%s", binding["line_user_id"], exc_info=True)
+        return pushed
+
+    @app.post("/admin/weekly-report")
+    async def weekly_report(request: Request) -> dict:
+        """週六早上：持股週報推播。"""
+        _check_cron_secret(request)
+        pushed = await _push_personal(request, build_weekly_report)
+        logger.info("持股週報完成 pushed=%s", pushed)
+        return {"ok": True, "pushed": pushed}
+
+    @app.post("/admin/weekly-outlook")
+    async def weekly_outlook(request: Request) -> dict:
+        """週日早上：下週展望推播＋觸發回補健檢。"""
+        _check_cron_secret(request)
+        pushed = await _push_personal(request, build_weekly_outlook)
+        backfill = await _start_backfill(request)
+        logger.info("下週展望完成 pushed=%s backfill=%s", pushed, backfill)
+        return {"ok": True, "pushed": pushed, "backfill": backfill}
+
+    @app.get("/admin/backfill-history")
+    async def backfill_history_status(request: Request) -> dict:
+        """查詢背景回補進度（不觸發）。"""
+        _check_cron_secret(request)
+        default = {"running": False, "total": 0, "done": 0, "errors": 0}
+        return {"ok": True, **getattr(request.app.state, "backfill_status", default)}
+
+    @app.post("/admin/backfill-history")
+    async def backfill_history(request: Request) -> dict:
+        """背景回補全市場歷史價（受節流器保護、可中斷重跑：已足夠的個股會跳過）。"""
+        _check_cron_secret(request)
+        return {"ok": True, **await _start_backfill(request)}
 
     @app.post("/admin/daily-picks")
     async def daily_picks(request: Request) -> dict:

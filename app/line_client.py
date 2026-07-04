@@ -7,6 +7,7 @@ import httpx
 
 REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 MULTICAST_URL = "https://api.line.me/v2/bot/message/multicast"
+PUSH_URL = "https://api.line.me/v2/bot/message/push"
 _MAX_TEXT_LENGTH = 4900
 _MULTICAST_MAX_RECIPIENTS = 500
 
@@ -33,6 +34,15 @@ class LineClient:
             REPLY_URL,
             headers={"Authorization": f"Bearer {self._access_token}"},
             json={"replyToken": reply_token, "messages": [payload]},
+        )
+        response.raise_for_status()
+
+    async def push(self, user_id: str, text: str) -> None:
+        """主動推播給單一使用者（週報等個人化訊息）。"""
+        response = await self._http.post(
+            PUSH_URL,
+            headers={"Authorization": f"Bearer {self._access_token}"},
+            json={"to": user_id, "messages": [{"type": "text", "text": text[:_MAX_TEXT_LENGTH]}]},
         )
         response.raise_for_status()
 
