@@ -60,3 +60,15 @@ select cron.schedule(
 -- 查看排程：select * from cron.job;
 -- 查看執行紀錄：select * from cron.job_run_details order by start_time desc limit 10;
 -- 取消排程：select cron.unschedule('daily-stock-snapshot');
+
+-- 週末保活：週六日台北 10:00、22:00 ping 健康檢查，避免 HF Space 因 48 小時無請求而休眠
+select cron.schedule(
+  'weekend-keepalive',
+  '0 2,14 * * 0,6',
+  $$
+  select net.http_get(
+    url := 'https://dadamouse-line-stock-bot.hf.space/',
+    timeout_milliseconds := 30000
+  );
+  $$
+);
