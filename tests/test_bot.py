@@ -106,6 +106,7 @@ VOLUME_RANK = [
 ]
 
 YAHOO_FIXTURES = {
+    "^VIX": [16.5, 18.5],
     "^DJI": [52900.07, 53055.91],
     "^GSPC": [7483.24, 7537.43],
     "^IXIC": [25832.67, 26121.16],
@@ -116,7 +117,25 @@ YAHOO_FIXTURES = {
     "USDTWD=X": [31.9, 32.0],
 }
 
+def _market_series_fixture():
+    """desc 序列：最新 45479.11（-2.3%），前一日 46556.39，其餘 18 天 46000；量能比 1.05。"""
+    rows = [
+        {"trade_date": "2026-07-07", "taiex": 45479.11, "amount": 10.5e12},
+        {"trade_date": "2026-07-06", "taiex": 46556.39, "amount": 10e12},
+    ]
+    for i in range(18):
+        rows.append({"trade_date": f"2026-06-{20 - i:02d}", "taiex": 46000.0, "amount": 10e12})
+    return rows
+
+
 RPC_FIXTURES = {
+    "market_series": _market_series_fixture(),
+    "market_flow_series": [
+        {"trade_date": "2026-07-06", "insti_net": -242258868, "margin_chg": -42283},
+        {"trade_date": "2026-07-03", "insti_net": 120316000, "margin_chg": 102565},
+        {"trade_date": "2026-07-02", "insti_net": None, "margin_chg": 115073},
+    ],
+    "market_breadth": [{"up_count": 1177, "down_count": 965, "new_high": 339, "new_low": 55}],
     "market_daily_summary": [
         {"insti_date": "2026-07-06", "institutional_net": -242258868, "margin_date": "2026-07-06", "margin_change": -42283},
     ],
@@ -163,6 +182,7 @@ class FakePostgrest:
             "daily_margins": [],
             "daily_institutional": [],
             "dividend_events": [],
+            "daily_market": [],
         }
         self._next_id = 1
 
@@ -242,6 +262,17 @@ class BotRuntime:
                 return httpx.Response(
                     200,
                     json={"chart": {"result": [{"meta": {"symbol": symbol}, "indicators": {"quote": [{"close": closes}]}}]}},
+                )
+            if url.startswith("https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "stat": "OK",
+                        "data": [
+                            ["115/07/06", "8,111,222,333", "10,644,000,000,000", "2,222,333", "46,556.39", "-224.66"],
+                            ["115/07/07", "9,111,222,333", "12,281,000,000,000", "2,555,333", "45,479.11", "-1,077.28"],
+                        ],
+                    },
                 )
             if url.startswith("https://mis.twse.com.tw/stock/api/getStockInfo.jsp"):
                 return httpx.Response(
@@ -608,10 +639,45 @@ def test_daily_picks_push_endpoint():
         assert payload["pushed"] == 1
         push = rt.replies[-1]
         assert push["to"] == ["U-test"]
-        assert push["messages"][0]["type"] == "flex"
-        assert "🎯 每日選股" in push["messages"][0]["altText"]
+        assert push["messages"][0]["type"] == "text"  # 第一則：大盤體檢
+        assert push["messages"][1]["type"] == "flex"  # 第二則：選股卡片
+        assert "🎯 每日選股" in push["messages"][1]["altText"]
 
         assert rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "wrong"}).status_code == 403
+
+
+def test_market_health_command():
+    with BotRuntime() as rt:
+        rt.send("體檢")  # 不需登入；「大盤」「6」也可
+        text = rt.last_reply()
+        assert "📋 大盤體檢（07/07）" in text
+        assert "加權指數 45,479.11（-2.3%）" in text
+        assert "位置：月線下方 1.1%" in text
+        assert "量能：5 日均量的 1.05 倍" in text
+        assert "大盤 RSI14：" in text
+        assert "匯率：美元/台幣 32.00（+0.31%，台幣貶）" in text
+        assert "法人：今日 -242,259 張（連 1 日賣超）" in text
+        assert "融資：-42,283 張｜5 日累計 +175,355 張（資料日 07/06）" in text
+        assert "寬度：漲 1,177 家／跌 965 家｜創20日新高 339／新低 55" in text
+        assert "VIX 恐慌指數：18.5（+12.1%）" in text
+        # 白話解讀（描述現況、不做預測）
+        assert "【📖 白話解讀】" in text
+        assert "指數收在月線之下 → 短線趨勢偏弱" in text
+        assert "台幣明顯走貶 → 外資資金偏匯出" in text
+        assert "法人連 1 日賣超 → 大戶偏保守" in text
+        assert "融資 5 日大增 → 散戶槓桿升溫" in text
+        assert "VIX 跳升 → 國際避險情緒升溫" in text
+        assert "僅陳列現況供判讀" in text
+
+
+def test_daily_picks_push_includes_health():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "cron-secret"})
+        push = rt.replies[-1]
+        assert len(push["messages"]) == 2
+        assert "大盤體檢" in push["messages"][0]["text"]
+        assert push["messages"][1]["type"] == "flex"
 
 
 def test_picks_web_page():
@@ -761,6 +827,11 @@ def test_daily_snapshot_stores_closes_margins_dividends():
         assert payload["margins"] == 2
         assert payload["institutional"] == 2
         assert payload["dividends"] == 2
+        assert payload["market"] == 2  # FMTQIK 大盤兩個交易日
+        assert {r["trade_date"]: r["taiex"] for r in rt.postgrest.db["daily_market"]} == {
+            "2026-07-06": 46556.39,
+            "2026-07-07": 45479.11,
+        }
 
         institutional = {(r["stock_no"], r["trade_date"]): r for r in rt.postgrest.db["daily_institutional"]}
         assert institutional[("2330", "2026-07-02")]["total_net"] == 5500000.0

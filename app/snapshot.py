@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from .parser import roc_compact_to_iso
+from .parser import roc_compact_to_iso, roc_slash_to_iso
 from .supabase import SupabaseClient
 from .twse import TwseClient
 
@@ -118,6 +118,21 @@ def otc_margin_rows(data: list[dict]) -> list[dict]:
                 "short_change": _diff(short_balance, _num(item.get("ShortSaleBalancePreviousDay"))),
             }
         )
+    return rows
+
+
+# ---------- 大盤（加權指數＋成交金額） ----------
+def market_rows(api_json: dict | None) -> list[dict]:
+    """TWSE FMTQIK 月資料 → daily_market 資料列。data 每列：[日期, 成交股數, 成交金額, 筆數, 指數, 漲跌]"""
+    if not api_json or api_json.get("stat") != "OK":
+        return []
+    rows = []
+    for raw in api_json.get("data", []):
+        trade_date = roc_slash_to_iso(raw[0])
+        taiex = _num(raw[4])
+        if not trade_date or taiex is None:
+            continue
+        rows.append({"trade_date": trade_date, "taiex": taiex, "amount": _num(raw[2])})
     return rows
 
 
@@ -273,17 +288,22 @@ async def run_snapshot(db: SupabaseClient, twse: TwseClient) -> dict:
     dividend_rows = await _collect("上市除權息", twse.fetch_listed_dividends(), listed_dividend_rows)
     dividend_rows += await _collect("上櫃除權息", twse.fetch_otc_dividends(), otc_dividend_rows)
 
+    today = datetime.now(_TAIPEI_TZ).date()
+    market_data = await _collect("大盤指數", twse.fetch_market_month(today.year, today.month), market_rows)
+
     closes = await _upsert(db, "daily_closes", "stock_no,trade_date", ("stock_no", "trade_date"), close_rows)
     margins = await _upsert(db, "daily_margins", "stock_no,trade_date", ("stock_no", "trade_date"), margin_rows)
     institutional = await _upsert(
         db, "daily_institutional", "stock_no,trade_date", ("stock_no", "trade_date"), institutional_rows
     )
     dividends = await _upsert(db, "dividend_events", "stock_no,ex_date", ("stock_no", "ex_date"), dividend_rows)
+    market = await _upsert(db, "daily_market", "trade_date", ("trade_date",), market_data)
     trade_dates = sorted({row["trade_date"] for row in close_rows})
     return {
         "closes": closes,
         "margins": margins,
         "institutional": institutional,
         "dividends": dividends,
+        "market": market,
         "trade_dates": trade_dates,
     }

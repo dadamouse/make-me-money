@@ -17,6 +17,7 @@ from .flex import build_picks_message
 from .handlers import build_portfolio_entries, handle_command, picks_web_url
 from .history import get_price_history
 from .line_client import LineClient, verify_signature
+from .market_health import build_market_health
 from .parser import parse_command, summarize_portfolio
 from .pending import PendingChoices
 from .premarket import build_macro_brief, build_open_brief
@@ -268,8 +269,9 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             bindings = await deps.db.get("line_bindings?select=line_user_id")
             user_ids = [b["line_user_id"] for b in bindings]
             if user_ids:
+                health = await build_market_health(deps)
                 message = build_picks_message(result, format_picks_message(result), picks_web_url(deps))
-                await request.app.state.line.multicast(user_ids, message)
+                await request.app.state.line.multicast(user_ids, [health, message])
                 pushed = len(user_ids)
                 _prefetch_pick_charts(request, result)  # 推播後先把入選股的圖備好
         logger.info("每日選股完成 pushed=%s", pushed)

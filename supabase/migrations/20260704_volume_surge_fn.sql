@@ -20,6 +20,7 @@ language sql stable as $$
       lag(dc.volume) over (partition by dc.stock_no order by dc.trade_date) as prev_volume,
       row_number() over (partition by dc.stock_no order by dc.trade_date desc) as rn
     from daily_closes dc
+    join stocks s on s.stock_no = dc.stock_no  -- 限正規對照表，排除權證/債券等
     where dc.trade_date >= current_date - 14
   )
   select r.stock_no, r.trade_date, r.close, r.prev_close, r.volume, r.prev_volume

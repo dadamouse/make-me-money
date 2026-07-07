@@ -49,11 +49,16 @@ class LineClient:
         )
         response.raise_for_status()
 
-    async def multicast(self, user_ids: list[str], message: str | dict) -> None:
-        """主動推播給多位使用者（每日選股用）。"""
+    async def multicast(self, user_ids: list[str], messages: str | dict | list) -> None:
+        """主動推播給多位使用者；可一次帶多則訊息（LINE 上限 5 則）。"""
+        if not isinstance(messages, list):
+            messages = [messages]
         response = await self._http.post(
             MULTICAST_URL,
             headers={"Authorization": f"Bearer {self._access_token}"},
-            json={"to": user_ids[:_MULTICAST_MAX_RECIPIENTS], "messages": [self._payload(message)]},
+            json={
+                "to": user_ids[:_MULTICAST_MAX_RECIPIENTS],
+                "messages": [self._payload(m) for m in messages[:5]],
+            },
         )
         response.raise_for_status()

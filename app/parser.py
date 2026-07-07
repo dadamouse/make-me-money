@@ -9,7 +9,8 @@ HELP_TEXT = "\n".join(
         "2️⃣ 詳細持股｜每檔持股一張技術分析圖",
         "3️⃣ 今日資訊｜持股重大訊息與除權息提醒",
         "4️⃣ 量增排行｜全市場今日量增前 10 名",
-        "5️⃣ 每日選股｜法人連買、同買、突破、KD 交叉",
+        "5️⃣ 每日選股｜六策略選股卡片（附網頁版）",
+        "6️⃣ 大盤體檢｜指數位置、量能、法人、融資、寬度、VIX",
         "──────────",
         "文字指令：",
         "登入dada／切換媽媽",
@@ -19,7 +20,7 @@ HELP_TEXT = "\n".join(
 )
 
 # 無待選項目時，數字直接對應功能選單
-MENU_ACTIONS = {1: "list", 2: "charts_all", 3: "news", 4: "volume_rank", 5: "picks"}
+MENU_ACTIONS = {1: "list", 2: "charts_all", 3: "news", 4: "volume_rank", 5: "picks", 6: "health"}
 
 _NUMBER = r"(\d+(?:\.\d+)?)"
 
@@ -63,6 +64,8 @@ def parse_command(raw_text: str | None) -> Command:
         return Command(action="volume_rank")
     if re.fullmatch(r"每日選股|選股", text):
         return Command(action="picks")
+    if re.fullmatch(r"大盤體檢|體檢|大盤", text):
+        return Command(action="health")
     return Command(action="help")
 
 

@@ -15,6 +15,7 @@ from .flex import (
 )
 from .history import get_price_history
 from .indicators import compute_indicators
+from .market_health import build_market_health
 from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number
 from .screener import format_picks_message, run_daily_picks
 from .webview import picks_sig, portfolio_sig
@@ -448,6 +449,8 @@ async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> 
         return await _handle_volume_rank(deps)
     if cmd.action == "picks":  # 全市場選股，不需身份
         return await _handle_picks(deps)
+    if cmd.action == "health":  # 大盤體檢，不需身份
+        return await build_market_health(deps)
     member = await _get_acting_member(deps, line_user_id)
     if not member:
         return "👋 請先輸入「登入你的名字」開始使用，例如：登入dada"
@@ -475,6 +478,8 @@ async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> 
         return await _handle_volume_rank(deps)
     if cmd.action == "picks":
         return await _handle_picks(deps)
+    if cmd.action == "health":
+        return await build_market_health(deps)
     return HELP_TEXT
 
 

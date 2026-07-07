@@ -44,10 +44,23 @@ select cron.schedule(
   $$
 );
 
--- 每日選股推播：台北 22:45（晚間快照後），符合條件才推播
+-- 17:50（台北）收盤快照（收當日收盤價＋三大法人）
+select cron.schedule(
+  'daily-stock-snapshot-close',
+  '50 9 * * 1-5',
+  $$
+  select net.http_post(
+    url := 'https://dadamouse-line-stock-bot.hf.space/admin/daily-snapshot',
+    headers := '{"x-cron-secret": "YOUR_CRON_SECRET"}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+  $$
+);
+
+-- 每日選股＋大盤體檢推播：台北 18:00（法人 16:00 已公布；融資為前一日，隔天早上補最新）
 select cron.schedule(
   'daily-stock-picks',
-  '45 14 * * 1-5',
+  '0 10 * * 1-5',
   $$
   select net.http_post(
     url := 'https://dadamouse-line-stock-bot.hf.space/admin/daily-picks',

@@ -18,6 +18,7 @@ LISTED_MARGINS_URL = "https://openapi.twse.com.tw/v1/exchangeReport/MI_MARGN"
 LISTED_DIVIDENDS_URL = "https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL"
 LISTED_NEWS_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap04_L"
 LISTED_INSTITUTIONAL_URL = "https://www.twse.com.tw/rwd/zh/fund/T86"
+MARKET_MONTH_URL = "https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK"
 TPEX_COMPANIES_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TPEX_QUOTES_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
 TPEX_MARGINS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_margin_balance"
@@ -165,6 +166,16 @@ class TwseClient:
 
     async def fetch_otc_institutional(self) -> list[dict]:
         return await self._get_json(TPEX_INSTITUTIONAL_URL)
+
+    async def fetch_market_month(self, year: int, month: int) -> dict:
+        """TWSE FMTQIK 大盤月資料（加權指數＋成交金額）。"""
+        await self._twse_throttle.wait(_TWSE_THROTTLE_SECONDS)
+        response = await self._http.get(
+            MARKET_MONTH_URL,
+            params={"date": f"{year}{month:02d}01", "response": "json"},
+        )
+        response.raise_for_status()
+        return response.json()
 
     async def fetch_otc_news(self) -> list[dict]:
         return await self._get_json(TPEX_NEWS_URL)
