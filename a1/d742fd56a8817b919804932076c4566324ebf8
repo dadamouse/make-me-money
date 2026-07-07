@@ -1,0 +1,24 @@
+app/premarket.py
+  s_d4fdd612f940f8::t_5ab9e0e25b731f 195-216
+  s_d4fdd612f940f8::t_fda6f5ebd9fc3b 56-112,115-118,121,124,130-131
+  s_d4fdd612f940f8::t_1177b4c50536ec 162
+tests/test_premarket.py
+  s_d4fdd612f940f8::t_ed05e7eff812d6 17-23
+  s_d4fdd612f940f8::t_dec6d401c99b0c 48-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a1d742fd56a8817b919804932076c4566324ebf8",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
