@@ -80,11 +80,18 @@ async def fetch_quote(http: httpx.AsyncClient, symbol: str) -> dict | None:
         return None
 
 
+_UP_ARROW = "🔺"   # 紅＝漲（台股慣例）
+_DOWN_ARROW = "🔽"  # 藍＝跌（Unicode 沒有綠色下三角，取對比色）
+
+
+def _arrow(pct: float) -> str:
+    return _UP_ARROW if pct >= 0 else _DOWN_ARROW
+
+
 def _quote_line(label: str, quote: dict | None) -> str:
     if not quote:
         return f"{label}：資料暫缺"
-    arrow = "🔺" if quote["pct"] >= 0 else "🔻"
-    return f"{label} {format_number(quote['price'])}　{arrow}{abs(quote['pct']):.1f}%"
+    return f"{label} {format_number(quote['price'])}　{_arrow(quote['pct'])}{abs(quote['pct']):.1f}%"
 
 
 def _interpret_macro(quotes: dict[str, dict | None], adr: dict | None, fx: dict | None) -> list[str]:
@@ -159,7 +166,7 @@ async def build_macro_brief(http: httpx.AsyncClient) -> str:
     lines.append(_quote_line("台積電 ADR", adr))
     if fx:
         direction = "台幣貶" if fx["pct"] >= 0 else "台幣升"
-        lines.append(f"美元/台幣 {fx['price']:.3f}　{'🔺' if fx['pct'] >= 0 else '🔻'}{abs(fx['pct']):.2f}%（{direction}）")
+        lines.append(f"美元/台幣 {fx['price']:.3f}　{_arrow(fx['pct'])}{abs(fx['pct']):.2f}%（{direction}）")
     else:
         lines.append("美元/台幣：資料暫缺")
     lines.append("")

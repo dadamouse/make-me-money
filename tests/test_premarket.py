@@ -10,8 +10,8 @@ def test_morning_macro_push():
         text = rt.replies[-1]["messages"][0]["text"]
         assert "盤前總經快報" in text
         assert "道瓊 53,055.91　🔺0.3%" in text
-        assert "日經 225 68,256.96　🔻2.1%" in text
-        assert "韓國 KOSPI 7,656.31　🔻4.9%" in text
+        assert "日經 225 68,256.96　🔽2.1%" in text
+        assert "韓國 KOSPI 7,656.31　🔽4.9%" in text
         assert "台積電 ADR 451.79　🔺4.1%" in text
         assert "美元/台幣 32.000　🔺0.31%（台幣貶）" in text
         # 白話解讀：教你怎麼看
