@@ -3,6 +3,7 @@ import base64
 import hashlib
 import hmac
 import json
+from urllib.parse import unquote
 
 import httpx
 from fastapi.testclient import TestClient
@@ -104,7 +105,21 @@ VOLUME_RANK = [
      "volume": 35919290.0, "prev_volume": 32905868.0},
 ]
 
+YAHOO_FIXTURES = {
+    "^DJI": [52900.07, 53055.91],
+    "^GSPC": [7483.24, 7537.43],
+    "^IXIC": [25832.67, 26121.16],
+    "^SOX": [13353.28, 12900.14],
+    "^N225": [69737.69, 68256.96],
+    "^KS11": [8051.33, 7656.31],
+    "TSM": [434.16, 451.79],
+    "USDTWD=X": [31.9, 32.0],
+}
+
 RPC_FIXTURES = {
+    "market_daily_summary": [
+        {"insti_date": "2026-07-06", "institutional_net": -242258868, "margin_date": "2026-07-06", "margin_change": -42283},
+    ],
     "volume_surge_ranking": VOLUME_RANK,
     "snapshot_depth": [{"insti_days": 3, "close_days": 25, "margin_days": 2}],
     "margin_reduce_price_up_picks": [
@@ -219,6 +234,15 @@ class BotRuntime:
             if url.startswith("https://api.line.me/"):
                 self.replies.append(json.loads(request.content))
                 return httpx.Response(200, json={})
+            if url.startswith("https://query1.finance.yahoo.com/v8/finance/chart/"):
+                symbol = unquote(url.split("/chart/")[1].split("?")[0])
+                closes = YAHOO_FIXTURES.get(symbol)
+                if closes is None:
+                    return httpx.Response(404, json={})
+                return httpx.Response(
+                    200,
+                    json={"chart": {"result": [{"meta": {"symbol": symbol}, "indicators": {"quote": [{"close": closes}]}}]}},
+                )
             if url.startswith("https://www.twse.com.tw/rwd/zh/fund/T86"):
                 return httpx.Response(200, json=LISTED_INSTITUTIONAL)
             if url.startswith("https://www.twse.com.tw/"):

@@ -19,6 +19,7 @@ from .history import get_price_history
 from .line_client import LineClient, verify_signature
 from .parser import parse_command, summarize_portfolio
 from .pending import PendingChoices
+from .premarket import build_macro_brief, build_open_brief
 from .screener import format_picks_message, has_picks, run_daily_picks
 from .snapshot import run_snapshot
 from .supabase import SupabaseClient
@@ -46,6 +47,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             charts=ChartStore(),
             base_url=cfg.base_url,
             sign_key=cfg.line_channel_secret,
+            http=http,
         )
         try:
             count = await sync_stocks(app.state.deps.db, app.state.deps.twse)
@@ -196,6 +198,31 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             except httpx.HTTPError:
                 logger.warning("推播失敗 user=%s", binding["line_user_id"], exc_info=True)
         return pushed
+
+    async def _broadcast(request: Request, message: str | dict) -> int:
+        deps = request.app.state.deps
+        bindings = await deps.db.get("line_bindings?select=line_user_id")
+        user_ids = [b["line_user_id"] for b in bindings]
+        if not user_ids:
+            return 0
+        await request.app.state.line.multicast(user_ids, message)
+        return len(user_ids)
+
+    @app.post("/admin/morning-macro")
+    async def morning_macro(request: Request) -> dict:
+        """平日 08:00：盤前總經快報（美日韓指數、ADR、匯率）。"""
+        _check_cron_secret(request)
+        pushed = await _broadcast(request, await build_macro_brief(request.app.state.deps.http))
+        logger.info("盤前總經快報 pushed=%s", pushed)
+        return {"ok": True, "pushed": pushed}
+
+    @app.post("/admin/morning-open")
+    async def morning_open(request: Request) -> dict:
+        """平日 08:30：開盤前導航（ADR 隱含價、昨日台股、今日除權息）。"""
+        _check_cron_secret(request)
+        pushed = await _broadcast(request, await build_open_brief(request.app.state.deps))
+        logger.info("開盤前導航 pushed=%s", pushed)
+        return {"ok": True, "pushed": pushed}
 
     @app.post("/admin/weekly-report")
     async def weekly_report(request: Request) -> dict:

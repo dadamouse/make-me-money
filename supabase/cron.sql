@@ -86,3 +86,29 @@ select cron.schedule(
   );
   $$
 );
+
+-- 平日 08:00（台北）盤前總經快報（美日韓指數、ADR、匯率）
+select cron.schedule(
+  'morning-macro',
+  '0 0 * * 1-5',
+  $$
+  select net.http_post(
+    url := 'https://dadamouse-line-stock-bot.hf.space/admin/morning-macro',
+    headers := '{"x-cron-secret": "YOUR_CRON_SECRET"}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+  $$
+);
+
+-- 平日 08:30（台北）開盤前導航（ADR 隱含價、昨日台股、今日除權息）
+select cron.schedule(
+  'morning-open',
+  '30 0 * * 1-5',
+  $$
+  select net.http_post(
+    url := 'https://dadamouse-line-stock-bot.hf.space/admin/morning-open',
+    headers := '{"x-cron-secret": "YOUR_CRON_SECRET"}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+  $$
+);
