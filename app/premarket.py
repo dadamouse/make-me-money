@@ -25,6 +25,40 @@ TSM_ADR_SYMBOL = "TSM"
 USDTWD_SYMBOL = "USDTWD=X"
 _ADR_SHARES_PER_UNIT = 5  # 1 單位 TSM ADR = 5 股台積電
 
+_MIS_URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
+_MIS_CODES = "tse_t00.tw|tse_2330.tw"  # 加權指數＋台積電（8:30-9:00 回試撮價）
+
+
+async def fetch_trial_quotes(http: httpx.AsyncClient) -> dict[str, dict]:
+    """TWSE MIS 即時報價；試撮時段（8:30-9:00）z 欄為模擬撮合價。"""
+    try:
+        response = await http.get(
+            _MIS_URL,
+            params={"ex_ch": _MIS_CODES, "json": "1", "delay": "0"},
+            headers=_YAHOO_HEADERS,
+        )
+        response.raise_for_status()
+        quotes = {}
+        for item in response.json().get("msgArray", []):
+            def _num(key: str) -> float | None:
+                try:
+                    return float(item.get(key))
+                except (TypeError, ValueError):
+                    return None
+
+            quotes[item.get("c")] = {"name": item.get("n"), "last": _num("z"), "prev": _num("y"), "time": item.get("t")}
+        return quotes
+    except Exception:
+        logger.warning("MIS 試撮報價失敗", exc_info=True)
+        return {}
+
+
+def _trial_line(label: str, quote: dict | None) -> str | None:
+    if not quote or quote["last"] is None or not quote["prev"]:
+        return None
+    pct = (quote["last"] - quote["prev"]) / quote["prev"] * 100
+    return f"{label} {format_number(quote['last'])}（{sign_of(pct)}{pct:.1f}%，{quote.get('time') or ''}）"
+
 
 async def fetch_quote(http: httpx.AsyncClient, symbol: str) -> dict | None:
     """Yahoo v8 chart → {price, prev, pct}；以最近兩個有效收盤計算漲跌。"""
@@ -173,6 +207,18 @@ async def build_open_brief(deps: Deps) -> str:
     else:
         lines.append("ADR 或匯率資料暫缺，無法估算")
 
+    trial = await fetch_trial_quotes(deps.http)
+    lines.append("")
+    lines.append("【台股試撮（8:30-9:00 模擬撮合）】")
+    trial_index = trial.get("t00")
+    index_line = _trial_line("加權指數", trial_index)
+    tsmc_line = _trial_line("台積電", trial.get("2330"))
+    if index_line or tsmc_line:
+        lines += [line for line in (index_line, tsmc_line) if line]
+        lines.append("＊8:55 前試撮可掛假單，價格僅供參考")
+    else:
+        lines.append("目前非試撮時段，暫無資料")
+
     yesterday = await _yesterday_taiwan_summary(deps)
     if yesterday:
         lines.append("")
@@ -194,6 +240,14 @@ async def build_open_brief(deps: Deps) -> str:
         lines.append("今日無除權息")
     lines.append("")
     lines.append("【📖 白話解讀】")
+    if trial_index and trial_index["last"] is not None and trial_index["prev"]:
+        trial_pct = (trial_index["last"] - trial_index["prev"]) / trial_index["prev"] * 100
+        if trial_pct <= -1:
+            lines.append(f"・試撮指數 {trial_pct:.1f}% → 開盤預告重挫，別急著接刀，等 9:05 後量價站穩再說")
+        elif trial_pct >= 1:
+            lines.append(f"・試撮指數 +{trial_pct:.1f}% → 開盤偏強，留意是否開高走低")
+        else:
+            lines.append("・試撮指數接近平盤 → 開盤方向不明，看首 15 分鐘量能")
     if premium is not None:
         if premium >= 2:
             lines.append(f"・ADR 隱含台積電開高約 {premium:.1f}% → 大盤開盤偏強；但溢價過大常會收斂，開高走低要留意")

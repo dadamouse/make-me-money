@@ -243,6 +243,17 @@ class BotRuntime:
                     200,
                     json={"chart": {"result": [{"meta": {"symbol": symbol}, "indicators": {"quote": [{"close": closes}]}}]}},
                 )
+            if url.startswith("https://mis.twse.com.tw/stock/api/getStockInfo.jsp"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "rtcode": "0000",
+                        "msgArray": [
+                            {"c": "t00", "n": "發行量加權股價指數", "z": "45479.11", "y": "46556.39", "t": "08:35:00"},
+                            {"c": "2330", "n": "台積電", "z": "2440.0000", "y": "2460.0000", "t": "08:35:00"},
+                        ],
+                    },
+                )
             if url.startswith("https://www.twse.com.tw/rwd/zh/fund/T86"):
                 return httpx.Response(200, json=LISTED_INSTITUTIONAL)
             if url.startswith("https://www.twse.com.tw/"):

@@ -41,6 +41,11 @@ def test_morning_open_push_with_adr_implied():
         # 451.79 × 32.0 ÷ 5 = 2891.456
         assert "台積電 ADR 451.79 美元 × 匯率 32.00 ÷ 5 ≈ 2,891.46 元" in text
         assert "對昨收 2,445：+18.3%" in text
+        assert "【台股試撮（8:30-9:00 模擬撮合）】" in text
+        assert "加權指數 45,479.11（-2.3%，08:35:00）" in text
+        assert "台積電 2,440（-0.8%，08:35:00）" in text
+        assert "＊8:55 前試撮可掛假單" in text
+        assert "試撮指數 -2.3% → 開盤預告重挫" in text
         assert "0050 收 108.25（-0.1%）" in text
         assert "三大法人 -242,259 張" in text
         assert "融資增減 -42,283 張" in text

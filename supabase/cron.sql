@@ -100,10 +100,10 @@ select cron.schedule(
   $$
 );
 
--- 平日 08:30（台北）開盤前導航（ADR 隱含價、昨日台股、今日除權息）
+-- 平日 08:35（台北）開盤前導航（ADR 隱含價、台股試撮、昨日台股、今日除權息）
 select cron.schedule(
   'morning-open',
-  '30 0 * * 1-5',
+  '35 0 * * 1-5',
   $$
   select net.http_post(
     url := 'https://dadamouse-line-stock-bot.hf.space/admin/morning-open',
