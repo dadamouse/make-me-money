@@ -1,0 +1,38 @@
+tests/test_premarket.py
+  s_d4fdd612f940f8::t_64c7f38016e330 1-40
+app/main.py
+  s_d4fdd612f940f8::t_2bbb63c0341cda 22
+  s_d4fdd612f940f8::t_385c47d7719416 50
+  s_d4fdd612f940f8::t_0eda3d6e9f679c 202-226
+app/premarket.py
+  s_d4fdd612f940f8::t_732971d0aa1203 80-88
+  s_d4fdd612f940f8::t_08f20741b5b745 1-79,89-133
+supabase/migrations/20260707_market_summary_fn.sql
+  s_d4fdd612f940f8::t_c4ad2b803b8656 1-12
+app/deps.py
+  s_d4fdd612f940f8::t_533875875f75cf 4-5,20
+tests/test_bot.py
+  s_d4fdd612f940f8::t_e8dcea2838b771 6
+  s_d4fdd612f940f8::t_3f9c79f5f24b94 108-118,120-122
+  s_d4fdd612f940f8::t_0c26a602f919b2 237-245
+supabase/cron.sql
+  s_d4fdd612f940f8::t_7f2b54e0e0e42b 89-114
+supabase/schema.sql
+  s_d4fdd612f940f8::t_7bdd25e3081d3d 330-342
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5c01191a49289bb4fc1b17396a92873f6427371b",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
