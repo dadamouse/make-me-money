@@ -1,0 +1,21 @@
+app/premarket.py
+  s_d4fdd612f940f8::t_6f454f38dfc01e 122
+supabase/cron.sql
+  s_d4fdd612f940f8::t_d87638cbed56ea 90,93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4ed923f49681c73edab41241793c7361b9f5c1fd",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
