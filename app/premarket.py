@@ -53,20 +53,82 @@ def _quote_line(label: str, quote: dict | None) -> str:
     return f"{label} {format_number(quote['price'])}　{arrow}{abs(quote['pct']):.1f}%"
 
 
+def _interpret_macro(quotes: dict[str, dict | None], adr: dict | None, fx: dict | None) -> list[str]:
+    """把數字翻成白話：這代表什麼、今天該注意什麼。"""
+    lines = ["【📖 白話解讀】"]
+    score = 0
+
+    tech = quotes.get("^SOX") or quotes.get("^IXIC")
+    if tech:
+        pct = tech["pct"]
+        if pct <= -1.5:
+            lines.append(f"・美股科技股大跌（費半 {pct:.1f}%）→ 台股電子股今天開盤壓力大")
+            score -= 1
+        elif pct >= 1.5:
+            lines.append(f"・美股科技股大漲（費半 +{pct:.1f}%）→ 對台股電子股是順風")
+            score += 1
+        else:
+            lines.append(f"・美股科技股持平（費半 {sign_of(pct)}{pct:.1f}%）→ 對台股影響中性")
+
+    asia = [q["pct"] for q in (quotes.get("^N225"), quotes.get("^KS11")) if q]
+    if asia:
+        avg = sum(asia) / len(asia)
+        if avg <= -1.5:
+            lines.append(f"・日韓股市同步走弱（平均 {avg:.1f}%）→ 亞洲整體風險情緒偏差")
+            score -= 1
+        elif avg >= 1.5:
+            lines.append(f"・日韓股市同步走強（平均 +{avg:.1f}%）→ 亞洲情緒偏樂觀")
+            score += 1
+        else:
+            lines.append("・日韓股市波動不大 → 亞洲情緒平穩")
+
+    if adr:
+        pct = adr["pct"]
+        if pct <= -1:
+            lines.append(f"・台積電 ADR 跌 {abs(pct):.1f}% → 台積電今天大概率開低，拖累大盤")
+            score -= 1
+        elif pct >= 1:
+            lines.append(f"・台積電 ADR 漲 {pct:.1f}% → 台積電今天大概率開高，撐盤")
+            score += 1
+        else:
+            lines.append("・台積電 ADR 變動小 → 開盤方向由其他因素決定")
+
+    if fx:
+        if fx["pct"] >= 0.3:
+            lines.append("・台幣明顯走貶 → 外資資金偏流出，賣壓可能延續")
+            score -= 1
+        elif fx["pct"] <= -0.3:
+            lines.append("・台幣明顯走升 → 外資資金偏流入，是買盤訊號")
+            score += 1
+
+    if score <= -2:
+        lines.append("→ 總結：🔴 今日偏空，開盤搶反彈要小心，控制部位")
+    elif score >= 2:
+        lines.append("→ 總結：🟢 今日偏多，但追高前看一下量能有沒有跟上")
+    else:
+        lines.append("→ 總結：🟡 多空訊號混雜，觀望為主、看開盤後量價再決定")
+    return lines
+
+
 async def build_macro_brief(http: httpx.AsyncClient) -> str:
     now = datetime.now(_TAIPEI_TZ)
+    quotes = {symbol: await fetch_quote(http, symbol) for _, symbol in MACRO_INDICES}
+    adr = await fetch_quote(http, TSM_ADR_SYMBOL)
+    fx = await fetch_quote(http, USDTWD_SYMBOL)
+
     lines = [f"🌅 盤前總經快報（{now.strftime('%m/%d %H:%M')}）", "", "【隔夜國際市場】"]
     for label, symbol in MACRO_INDICES:
-        lines.append(_quote_line(label, await fetch_quote(http, symbol)))
+        lines.append(_quote_line(label, quotes[symbol]))
     lines.append("")
     lines.append("【台股連動指標】")
-    lines.append(_quote_line("台積電 ADR", await fetch_quote(http, TSM_ADR_SYMBOL)))
-    fx = await fetch_quote(http, USDTWD_SYMBOL)
+    lines.append(_quote_line("台積電 ADR", adr))
     if fx:
         direction = "台幣貶" if fx["pct"] >= 0 else "台幣升"
         lines.append(f"美元/台幣 {fx['price']:.3f}　{'🔺' if fx['pct'] >= 0 else '🔻'}{abs(fx['pct']):.2f}%（{direction}）")
     else:
         lines.append("美元/台幣：資料暫缺")
+    lines.append("")
+    lines += _interpret_macro(quotes, adr, fx)
     return "\n".join(lines)
 
 
@@ -97,6 +159,7 @@ async def build_open_brief(deps: Deps) -> str:
     fx = await fetch_quote(deps.http, USDTWD_SYMBOL)
     tsmc = await deps.db.get("daily_closes?stock_no=eq.2330&select=close&order=trade_date.desc&limit=1")
     lines.append("【ADR 隱含開盤】")
+    premium = None
     if adr and fx and tsmc:
         implied = adr["price"] * fx["price"] / _ADR_SHARES_PER_UNIT
         last_close = float(tsmc[0]["close"])
@@ -128,6 +191,28 @@ async def build_open_brief(deps: Deps) -> str:
             lines.append(f"・{event['stock_no']} {names.get(event['stock_no'], '')}：除{event.get('kind') or ''}{cash_text}")
     else:
         lines.append("今日無除權息")
+    lines.append("")
+    lines.append("【📖 白話解讀】")
+    if premium is not None:
+        if premium >= 2:
+            lines.append(f"・ADR 隱含台積電開高約 {premium:.1f}% → 大盤開盤偏強；但溢價過大常會收斂，開高走低要留意")
+        elif premium <= -2:
+            lines.append(f"・ADR 隱含台積電開低約 {abs(premium):.1f}% → 大盤開盤承壓；恐慌開低有時反而是低接機會")
+        else:
+            lines.append("・ADR 隱含台積電平盤附近開出 → 開盤方向看盤中量能")
+    summary_rows2 = await deps.db.rpc("market_daily_summary", {})
+    if summary_rows2 and summary_rows2[0].get("institutional_net") is not None:
+        net = float(summary_rows2[0]["institutional_net"])
+        if net < 0:
+            lines.append("・昨日法人合計賣超 → 大戶偏保守，反彈先看量")
+        else:
+            lines.append("・昨日法人合計買超 → 大戶仍在承接，回檔支撐較強")
+    if summary_rows2 and summary_rows2[0].get("margin_change") is not None:
+        change = float(summary_rows2[0]["margin_change"])
+        if change < 0:
+            lines.append("・融資減少 → 散戶槓桿退場中，籌碼趨於乾淨（偏正面）")
+        elif change > 50000:
+            lines.append("・融資大增 → 散戶搶進，追高風險升高（跌時賣壓會被放大）")
     lines.append("")
     lines.append("09:00 開盤，祝操作順利 📈")
     return "\n".join(lines)
