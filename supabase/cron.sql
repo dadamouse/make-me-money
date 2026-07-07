@@ -87,10 +87,10 @@ select cron.schedule(
   $$
 );
 
--- 平日 08:00（台北）盤前總經快報（美日韓指數、ADR、匯率）
+-- 平日 08:05（台北）盤前總經快報（美股隔夜收盤；日韓開盤 5 分鐘後抓今日初段走勢）
 select cron.schedule(
   'morning-macro',
-  '0 0 * * 1-5',
+  '5 0 * * 1-5',
   $$
   select net.http_post(
     url := 'https://dadamouse-line-stock-bot.hf.space/admin/morning-macro',

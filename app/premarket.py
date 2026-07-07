@@ -119,6 +119,7 @@ async def build_macro_brief(http: httpx.AsyncClient) -> str:
     lines = [f"🌅 盤前總經快報（{now.strftime('%m/%d %H:%M')}）", "", "【隔夜國際市場】"]
     for label, symbol in MACRO_INDICES:
         lines.append(_quote_line(label, quotes[symbol]))
+    lines.append("＊美股為隔夜收盤；日韓 9:00（台北 8:00）開盤，顯示為今日開盤初段走勢")
     lines.append("")
     lines.append("【台股連動指標】")
     lines.append(_quote_line("台積電 ADR", adr))
