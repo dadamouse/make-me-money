@@ -14,6 +14,7 @@ from .flex import (
     build_portfolio_message,
 )
 from .history import get_price_history
+from .holders import holders_summary_line
 from .indicators import compute_indicators
 from .market_health import build_market_health_message
 from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number, parse_command
@@ -252,8 +253,14 @@ async def _render_chart_reply(deps: Deps, stock: dict) -> str | dict:
     chart_id = deps.charts.put(png)
     image_url = f"{deps.base_url}/charts/{chart_id}.png"
     indicators = compute_indicators(history)
+    holders_line = await holders_summary_line(deps, stock["stock_no"])
     return build_chart_message(
-        stock, image_url, history[-1]["close"], indicators, page_url=stock_web_url(deps, stock["stock_no"])
+        stock,
+        image_url,
+        history[-1]["close"],
+        indicators,
+        page_url=stock_web_url(deps, stock["stock_no"]),
+        extra_line=holders_line,
     )
 
 

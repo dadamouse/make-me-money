@@ -125,3 +125,16 @@ select cron.schedule(
   );
   $$
 );
+
+-- 週六 08:30（台北）同步集保股權分散（TDCC 每週五資料，千張大戶比/股東人數）
+select cron.schedule(
+  'weekly-holders-sync',
+  '30 0 * * 6',
+  $$
+  select net.http_post(
+    url := 'https://dadamouse-line-stock-bot.hf.space/admin/sync-holders',
+    headers := '{"x-cron-secret": "YOUR_CRON_SECRET"}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+  $$
+);

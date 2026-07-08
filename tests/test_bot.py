@@ -164,7 +164,21 @@ RPC_FIXTURES = {
     "momentum_picks": [
         {"stock_no": "2466", "stock_name": "冠西電", "close": 94.8, "base_close": 59.0, "gain_pct": 60.7},
     ],
+    "holders_depth": [{"weeks": 2}],
+    "concentration_picks": [
+        {"stock_no": "8033", "stock_name": "雷虎", "big_ratio": 45.2, "ratio_change": 1.2, "holders_change_pct": -2.3},
+    ],
 }
+
+TDCC_CSV = "\n".join(
+    [
+        "資料日期,證券代號,持股分級,人數,股數,占集保庫存數比例%",
+        "20260703,2330  ,15,1481,22066084295,85.09",
+        "20260703,2330  ,17,2898020,25932370067,100.00",
+        "20260703,3231  ,15,890,1200000000,42.50",
+        "20260703,3231  ,17,350000,2800000000,100.00",
+    ]
+)
 
 TWSE_OK = {
     "stat": "OK",
@@ -186,6 +200,7 @@ class FakePostgrest:
             "daily_institutional": [],
             "dividend_events": [],
             "daily_market": [],
+            "weekly_holders": [],
         }
         self._next_id = 1
 
@@ -306,6 +321,8 @@ class BotRuntime:
                 return httpx.Response(200, json=TPEX_NEWS)
             if url.startswith("https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock"):
                 return httpx.Response(200, json={"tables": []})
+            if url.startswith("https://opendata.tdcc.com.tw/"):
+                return httpx.Response(200, text=TDCC_CSV)
             if url.startswith("https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"):
                 return httpx.Response(200, json=OTC_COMPANIES)
             if url.startswith("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"):
@@ -613,7 +630,7 @@ def test_daily_picks_flex_carousel():
         assert "🎯 每日選股" in message["altText"]
         carousel = message["contents"]
         assert carousel["type"] == "carousel"
-        assert len(carousel["contents"]) == 7  # 七個策略各一張卡片
+        assert len(carousel["contents"]) == 8  # 八個策略各一張卡片
         content = json.dumps(carousel, ensure_ascii=False)
         assert "法人連買 3 日" in content
         assert "外資或投信連續 3 個交易日買超" in content  # 篩選邏輯說明

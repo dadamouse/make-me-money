@@ -208,6 +208,7 @@ def build_chart_bubble(
     indicators: dict | None,
     size: str = "giga",
     page_url: str | None = None,
+    extra_line: str | None = None,
 ) -> dict:
     """K 線圖卡片 bubble：hero 放圖、body 放收盤價與技術指標摘要。"""
     title = f"{stock['stock_no']} {stock['name']}"
@@ -220,6 +221,8 @@ def build_chart_bubble(
     ]
     if close is not None:
         body_rows += _indicator_rows({"indicators": indicators}, close)
+    if extra_line:
+        body_rows.append(_text(extra_line, size="xxs", color=MUTED_COLOR, wrap=True))
     bubble = {
         "type": "bubble",
         "size": size,
@@ -236,13 +239,18 @@ def build_chart_bubble(
 
 
 def build_chart_message(
-    stock: dict, image_url: str, close: float | None, indicators: dict | None, page_url: str | None = None
+    stock: dict,
+    image_url: str,
+    close: float | None,
+    indicators: dict | None,
+    page_url: str | None = None,
+    extra_line: str | None = None,
 ) -> dict:
     title = f"{stock['stock_no']} {stock['name']}"
     return {
         "type": "flex",
         "altText": f"{title} K線圖",
-        "contents": build_chart_bubble(stock, image_url, close, indicators, page_url=page_url),
+        "contents": build_chart_bubble(stock, image_url, close, indicators, page_url=page_url, extra_line=extra_line),
     }
 
 

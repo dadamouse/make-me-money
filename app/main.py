@@ -17,6 +17,7 @@ from .flex import build_picks_message
 from .handlers import build_portfolio_entries, handle_text, picks_web_url
 from .indicators import compute_indicators
 from .history import get_price_history
+from .holders import holders_summary_line, sync_holders
 from .line_client import LineClient, verify_signature
 from .market_health import build_market_health_message
 from .parser import summarize_portfolio
@@ -151,6 +152,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             "indicators": compute_indicators(history),
             "margin": margins[0] if margins else None,
             "institutional": institutional[0] if institutional else None,
+            "holders_line": await holders_summary_line(deps, stock_no),
         }
         return HTMLResponse(render_stock_html(entry))
 
@@ -258,6 +260,14 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         pushed = await _broadcast(request, await build_open_brief(request.app.state.deps))
         logger.info("開盤前導航 pushed=%s", pushed)
         return {"ok": True, "pushed": pushed}
+
+    @app.post("/admin/sync-holders")
+    async def sync_holders_endpoint(request: Request) -> dict:
+        """每週六早上：同步 TDCC 集保股權分散（千張大戶比、股東人數）。"""
+        _check_cron_secret(request)
+        result = await sync_holders(request.app.state.deps)
+        logger.info("集保資料同步完成 %s", result)
+        return {"ok": True, **result}
 
     @app.post("/admin/weekly-report")
     async def weekly_report(request: Request) -> dict:
