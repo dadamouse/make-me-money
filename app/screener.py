@@ -49,6 +49,13 @@ def _format_margin_reduce(row: dict) -> dict:
     return _pick(row, f"融資 {format_number(float(row['margin_change']))} 張、股價 +{pct:.1f}%")
 
 
+def _format_momentum(row: dict) -> dict:
+    return _pick(
+        row,
+        f"5 日漲 {float(row['gain_pct']):.1f}%（{format_number(float(row['base_close']))} → {format_number(float(row['close']))}）",
+    )
+
+
 def _format_short_ratio(row: dict) -> dict:
     return _pick(
         row,
@@ -97,6 +104,15 @@ _STRATEGIES = (
         "depth_key": "close_days",
         "min_depth": 15,
         "format": _format_kd,
+    },
+    {
+        "title": "5 日強勢股",
+        "desc": "近 5 個交易日累計上漲 15% 以上，依漲幅排序（今日成交 ≥500 張；強勢股追高風險也高）",
+        "rpc": "momentum_picks",
+        "args": {"limit_n": _LIMIT, "min_gain": 15, "min_volume": 500_000},
+        "depth_key": "close_days",
+        "min_depth": 6,
+        "format": _format_momentum,
     },
     {
         "title": "融資減、價格漲",

@@ -161,6 +161,9 @@ RPC_FIXTURES = {
     "kd_golden_cross_picks": [
         {"stock_no": "0050", "stock_name": "元大台灣50", "close": 108.8, "k_val": 25.3, "d_val": 22.1},
     ],
+    "momentum_picks": [
+        {"stock_no": "2466", "stock_name": "冠西電", "close": 94.8, "base_close": 59.0, "gain_pct": 60.7},
+    ],
 }
 
 TWSE_OK = {
@@ -599,7 +602,7 @@ def test_daily_picks_flex_carousel():
         assert "🎯 每日選股" in message["altText"]
         carousel = message["contents"]
         assert carousel["type"] == "carousel"
-        assert len(carousel["contents"]) == 6  # 六個策略各一張卡片
+        assert len(carousel["contents"]) == 7  # 七個策略各一張卡片
         content = json.dumps(carousel, ensure_ascii=False)
         assert "法人連買 3 日" in content
         assert "外資或投信連續 3 個交易日買超" in content  # 篩選邏輯說明
@@ -614,6 +617,8 @@ def test_daily_picks_flex_carousel():
         assert "K 25 上穿 D 22" in content
         assert "融資 -1,520 張、股價 +2.1%" in content
         assert "券資比 33.2%" in content
+        assert "5 日強勢股" in content
+        assert "5 日漲 60.7%（59 → 94.8）" in content
         # 點個股 → 自動送出「圖XXXX」
         assert '"text": "圖2834"' in content
         # 網頁版按鈕

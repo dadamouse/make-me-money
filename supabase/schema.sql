@@ -328,6 +328,37 @@ language sql stable as $$
   limit limit_n
 $$;
 
+-- 策略七：5 日強勢股（近 5 個交易日累計漲幅 >= min_gain%，今日成交量達門檻）
+create or replace function momentum_picks(
+  limit_n int default 5,
+  p_market text default null,
+  min_gain numeric default 15,
+  min_volume numeric default 500000
+)
+returns table (stock_no text, stock_name text, close numeric, base_close numeric, gain_pct numeric)
+language sql stable as $$
+  with ranked as (
+    select dc.stock_no, dc.close, dc.volume,
+           row_number() over (partition by dc.stock_no order by dc.trade_date desc) as rn
+    from daily_closes dc
+    join stocks s on s.stock_no = dc.stock_no  -- 限正規對照表
+    where dc.trade_date >= current_date - 14
+  ),
+  today as (select * from ranked where rn = 1),
+  base as (select * from ranked where rn = 6)  -- 5 個交易日前收盤
+  select t.stock_no, s.name, t.close, b.close,
+         round((t.close - b.close) / b.close * 100, 1)
+  from today t
+  join base b on b.stock_no = t.stock_no
+  left join stocks s on s.stock_no = t.stock_no
+  where b.close > 0
+    and (t.close - b.close) / b.close * 100 >= min_gain
+    and t.volume is not null and t.volume >= min_volume
+    and (p_market is null or s.market = p_market)
+  order by (t.close - b.close) / b.close desc
+  limit limit_n
+$$;
+
 -- 大盤日彙總：最新一日全市場法人合計與融資增減（盤前導航用）
 create or replace function market_daily_summary()
 returns table (insti_date date, institutional_net numeric, margin_date date, margin_change numeric)
