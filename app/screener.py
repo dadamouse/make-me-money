@@ -56,14 +56,6 @@ def _format_momentum(row: dict) -> dict:
     )
 
 
-def _format_concentration(row: dict) -> dict:
-    return _pick(
-        row,
-        f"千張大戶 {float(row['big_ratio']):.1f}%（週+{float(row['ratio_change']):.2f}pp）"
-        f"、股東數週 {float(row['holders_change_pct']):.1f}%",
-    )
-
-
 def _format_short_ratio(row: dict) -> dict:
     return _pick(
         row,
@@ -133,15 +125,6 @@ _STRATEGIES = (
         "format": _format_margin_reduce,
     },
     {
-        "title": "籌碼集中（週）",
-        "desc": "千張大戶持股比週增 ≥0.3 個百分點且股東人數下降（大戶吃貨、散戶退場；集保週資料，排除 ETF）",
-        "rpc": "concentration_picks",
-        "args": {"limit_n": _LIMIT, "min_ratio_gain": 0.3},
-        "depth_key": "holder_weeks",
-        "min_depth": 2,
-        "format": _format_concentration,
-    },
-    {
         "title": "高券資比",
         "desc": "融券餘額÷融資餘額最高（軋空潛力）；融資餘額門檻：上市 1,000 張／上櫃 300 張",
         "rpc": "short_margin_ratio_picks",
@@ -158,19 +141,16 @@ async def run_daily_picks(deps: Deps) -> dict:
     """每個策略分上市/上櫃各自排名（規模與流動性差異大，混排會被上市大型股洗榜）。"""
     depth_rows = await deps.db.rpc("snapshot_depth", {})
     depth = depth_rows[0] if depth_rows else {}
-    holder_rows = await deps.db.rpc("holders_depth", {})
-    depth["holder_weeks"] = holder_rows[0]["weeks"] if holder_rows else 0
     sections = []
     for strategy in _STRATEGIES:
         have = int(depth.get(strategy["depth_key"]) or 0)
         if have < strategy["min_depth"]:
-            unit = "週" if strategy["depth_key"] == "holder_weeks" else "個交易日"
             sections.append(
                 {
                     "title": strategy["title"],
                     "desc": strategy["desc"],
                     "markets": [],
-                    "skipped": f"資料累積中（需 {strategy['min_depth']} {unit}，目前 {have}）",
+                    "skipped": f"資料累積中（需 {strategy['min_depth']} 個交易日，目前 {have}）",
                 }
             )
             continue

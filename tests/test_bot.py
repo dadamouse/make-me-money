@@ -630,7 +630,7 @@ def test_daily_picks_flex_carousel():
         assert "🎯 每日選股" in message["altText"]
         carousel = message["contents"]
         assert carousel["type"] == "carousel"
-        assert len(carousel["contents"]) == 8  # 八個策略各一張卡片
+        assert len(carousel["contents"]) == 7  # 七個策略各一張卡片（籌碼集中移至週六週報）
         content = json.dumps(carousel, ensure_ascii=False)
         assert "法人連買 3 日" in content
         assert "外資或投信連續 3 個交易日買超" in content  # 篩選邏輯說明

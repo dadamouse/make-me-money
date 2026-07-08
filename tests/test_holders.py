@@ -41,7 +41,8 @@ def test_sync_holders_endpoint():
         assert rt.client.post("/admin/sync-holders", headers={"x-cron-secret": "wrong"}).status_code == 403
 
 
-def test_chart_card_shows_holders_line():
+def test_chart_card_has_no_weekly_holders_line():
+    """集保為週頻資料，僅在週六週報與個股網頁呈現，不放每日圖卡。"""
     with BotRuntime() as rt:
         from test_bot import _seed_history
         import json
@@ -49,28 +50,30 @@ def test_chart_card_shows_holders_line():
         _seed_history(rt, "2330")
         rt.postgrest.db["weekly_holders"] += [
             {"stock_no": "2330", "week_date": "2026-07-03", "total_holders": 2898020, "big_holders": 1481, "big_ratio": 85.09},
-            {"stock_no": "2330", "week_date": "2026-06-26", "total_holders": 2950000, "big_holders": 1450, "big_ratio": 84.80},
         ]
         rt.send("登入dada")
         rt.send("圖2330")
         content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
-        assert "千張大戶 85.1%（週+0.29pp）｜股東 2,898,020 人（週-1.8%）" in content
+        assert "千張大戶" not in content
 
 
-def test_concentration_strategy_skipped_until_two_weeks():
-    with BotRuntime(rpc_overrides={"holders_depth": [{"weeks": 1}]}) as rt:
-        rt.send("選股")
-        import json
+def test_weekly_report_includes_holders_concentration():
+    from datetime import datetime, timedelta, timezone
 
-        content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
-        assert "籌碼集中（週）" in content
-        assert "資料累積中（需 2 週，目前 1）" in content
-
-
-def test_concentration_strategy_picks():
+    today = datetime.now(timezone(timedelta(hours=8))).date()
     with BotRuntime() as rt:
-        rt.send("選股")
-        import json
-
-        content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
-        assert "千張大戶 45.2%（週+1.20pp）、股東數週 -2.3%" in content
+        rt.send("登入dada")
+        rt.send("新增2330 1000 850")
+        rt.postgrest.db["daily_closes"].append(
+            {"stock_no": "2330", "trade_date": (today - timedelta(days=1)).isoformat(), "close": 2445.0}
+        )
+        rt.postgrest.db["weekly_holders"] += [
+            {"stock_no": "2330", "week_date": "2026-07-03", "total_holders": 2898020, "big_holders": 1481, "big_ratio": 85.09},
+            {"stock_no": "2330", "week_date": "2026-06-26", "total_holders": 2950000, "big_holders": 1450, "big_ratio": 84.80},
+        ]
+        rt.client.post("/admin/weekly-report", headers={"x-cron-secret": "cron-secret"})
+        text = rt.replies[-1]["messages"][0]["text"]
+        assert "【持股籌碼集中度（集保，每週五結算）】" in text
+        assert "2330 台積電：千張大戶 85.1%（週+0.29pp）｜股東 2,898,020 人（週-1.8%）" in text
+        assert "【本週全市場籌碼集中 Top】" in text
+        assert "8033 雷虎：大戶 45.2%（週+1.20pp）、股東週 -2.3%" in text

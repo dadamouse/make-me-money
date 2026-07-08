@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from urllib.parse import quote
 
 from .deps import Deps
+from .holders import holders_summary_line
 from .parser import aggregate_holdings, format_number, sign_of
 
 logger = logging.getLogger(__name__)
@@ -115,6 +116,28 @@ async def build_weekly_report(deps: Deps, member: dict) -> str | None:
         lines.append("")
         lines.append("【法人本週動向】")
         lines += flow_lines
+
+    # 集保週資料：僅在週報呈現（平日卡片不放，避免過期一週的數字誤導）
+    holder_lines = []
+    for agg in aggregated:
+        summary_line = await holders_summary_line(deps, agg["stock_no"])
+        if summary_line:
+            holder_lines.append(f"・{agg['stock_no']} {name_map.get(agg['stock_no'], '')}：{summary_line}")
+    if holder_lines:
+        lines.append("")
+        lines.append("【持股籌碼集中度（集保，每週五結算）】")
+        lines += holder_lines
+
+    concentration = await deps.db.rpc("concentration_picks", {"limit_n": 3, "min_ratio_gain": 0.3})
+    if concentration:
+        lines.append("")
+        lines.append("【本週全市場籌碼集中 Top】")
+        lines.append("📋 千張大戶比週增 ≥0.3pp 且股東人數下降（大戶吃貨；排除 ETF）")
+        for row in concentration:
+            lines.append(
+                f"・{row['stock_no']} {row.get('stock_name') or ''}：大戶 {float(row['big_ratio']):.1f}%"
+                f"（週+{float(row['ratio_change']):.2f}pp）、股東週 {float(row['holders_change_pct']):.1f}%"
+            )
     return "\n".join(lines)
 
 
