@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 _TAIPEI_TZ = timezone(timedelta(hours=8))
 _STREAK_DAYS = 3
-_LIMIT = 5  # 每策略每市場前 N 名
+_LIMIT = 10  # 每策略每市場前 N 名（LINE 卡片顯示前 5、網頁版完整列出）
 _MARKETS = ("上市", "上櫃")
 
 

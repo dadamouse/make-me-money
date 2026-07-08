@@ -625,6 +625,24 @@ def test_daily_picks_flex_carousel():
         assert "/picks?sig=" in content
 
 
+def test_daily_picks_card_caps_at_five_web_shows_all():
+    many = [
+        {"stock_no": f"11{i:02d}", "stock_name": f"測試{i}", "foreign_net": 1000000 - i, "trust_net": 1000}
+        for i in range(8)
+    ]
+    with BotRuntime(rpc_overrides={"co_buy_picks": {"上市": many, "上櫃": []}}) as rt:
+        rt.send("選股")
+        content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
+        assert "1104 測試4" in content  # 第 5 檔有顯示
+        assert "1105 測試5" not in content  # 第 6 檔起卡片不顯示
+        assert "…還有 3 檔，開網頁版看完整前 10 名" in content
+
+        from app.webview import picks_sig
+
+        page = rt.client.get(f"/picks?sig={picks_sig('channel-secret')}")
+        assert "1107 測試7" in page.text  # 網頁版完整列出
+
+
 def test_daily_picks_skips_strategies_without_data():
     with BotRuntime(rpc_overrides={"snapshot_depth": [{"insti_days": 1, "close_days": 10}]}) as rt:
         rt.send("選股")

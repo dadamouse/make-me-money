@@ -226,12 +226,15 @@ def build_chart_message(stock: dict, image_url: str, close: float | None, indica
 _PICK_HEADER_COLORS = ("#27346A", "#00695C", "#B26A00", "#6A1B9A", "#AD1457", "#37474F")
 
 
+_PICKS_CARD_MAX = 5  # 卡片顯示前 N 檔（其餘見網頁版，避免超過 LINE 訊息大小上限）
+
+
 def _picks_group_rows(group: dict) -> list[dict]:
     rows = [_text(f"▍{group['market']}", size="xs", weight="bold", color=INDUSTRY_COLOR, margin="md")]
     if not group["picks"]:
         rows.append(_text("無符合標的", size="xs", color=MUTED_COLOR))
         return rows
-    for pick in group["picks"]:
+    for pick in group["picks"][:_PICKS_CARD_MAX]:
         rows.append(
             {
                 "type": "box",
@@ -245,6 +248,9 @@ def _picks_group_rows(group: dict) -> list[dict]:
                 ],
             }
         )
+    hidden = len(group["picks"]) - _PICKS_CARD_MAX
+    if hidden > 0:
+        rows.append(_text(f"…還有 {hidden} 檔，開網頁版看完整前 10 名", size="xxs", color=MUTED_COLOR))
     return rows
 
 
