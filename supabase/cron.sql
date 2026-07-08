@@ -139,7 +139,7 @@ select cron.schedule(
   $$
 );
 
--- 平日 22:50（台北）主力買賣超同步（MoneyDJ 分點頁，僅持股清單）
+-- 平日 22:50（台北）主力買賣超同步（MoneyDJ 分點頁，每檔 2 秒間隔 16 檔約 40 秒，timeout 加長）
 select cron.schedule(
   'daily-broker-flows',
   '50 14 * * 1-5',
@@ -147,7 +147,7 @@ select cron.schedule(
   select net.http_post(
     url := 'https://dadamouse-line-stock-bot.hf.space/admin/sync-broker-flows',
     headers := '{"x-cron-secret": "YOUR_CRON_SECRET"}'::jsonb,
-    timeout_milliseconds := 30000
+    timeout_milliseconds := 90000
   );
   $$
 );
