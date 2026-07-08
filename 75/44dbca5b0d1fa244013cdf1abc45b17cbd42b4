@@ -1,0 +1,42 @@
+app/broker_flows.py
+  s_d4fdd612f940f8::t_4b74ca82735b04 1-97
+app/main.py
+  s_d4fdd612f940f8::t_1dab751d35df0c 267-274
+  s_d4fdd612f940f8::t_d31cbcc32db6df 158-159
+  s_d4fdd612f940f8::t_1866b04737c09b 19
+app/flex.py
+  s_d4fdd612f940f8::t_db419c9ae7511b 118-124
+  s_d4fdd612f940f8::t_638f266c7b2ad7 91-94
+tests/test_broker_flows.py
+  s_d4fdd612f940f8::t_0c912cb502f82c 1-65
+tests/test_bot.py
+  s_d4fdd612f940f8::t_9ca238e6fae0eb 331-334
+  s_d4fdd612f940f8::t_94c28dfb908e2e 204
+app/handlers.py
+  s_d4fdd612f940f8::t_ae66ea86bf898c 206-208
+  s_d4fdd612f940f8::t_6f6240adace2ca 234
+supabase/cron.sql
+  s_d4fdd612f940f8::t_57551d4306e04d 141-153
+supabase/schema.sql
+  s_d4fdd612f940f8::t_57551d4306e04d 480-491
+app/webview.py
+  s_d4fdd612f940f8::t_9b3215e67e7494 123-124
+supabase/migrations/20260708_broker_flows.sql
+  s_d4fdd612f940f8::t_f0a6d3aedbf0ea 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7544dbca5b0d1fa244013cdf1abc45b17cbd42b4",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
