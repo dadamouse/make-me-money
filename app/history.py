@@ -71,17 +71,7 @@ async def _read(db: SupabaseClient, stock_no: str) -> list[dict]:
         f"daily_closes?stock_no=eq.{stock_no}&select=trade_date,close,open,high,low,volume"
         f"&order=trade_date.desc&limit={_READ_LIMIT}"
     )
-    return [
-        {
-            **row,
-            "close": _num(row.get("close")),
-            "open": _num(row.get("open")),
-            "high": _num(row.get("high")),
-            "low": _num(row.get("low")),
-            "volume": _num(row.get("volume")),
-        }
-        for row in reversed(rows)
-    ]
+    return _normalize_rows(list(reversed(rows)))
 
 
 async def _backfill(twse: TwseClient, stock_no: str, market: str | None) -> list[dict]:
@@ -117,6 +107,40 @@ def merge_realtime_bar(history: list[dict], bar: dict | None) -> list[dict]:
         merged = {**history[-1], **{k: v for k, v in bar.items() if v is not None}}
         return history[:-1] + [merged]
     return history
+
+
+def _normalize_rows(rows: list[dict]) -> list[dict]:
+    return [
+        {
+            **row,
+            "close": _num(row.get("close")),
+            "open": _num(row.get("open")),
+            "high": _num(row.get("high")),
+            "low": _num(row.get("low")),
+            "volume": _num(row.get("volume")),
+        }
+        for row in rows
+    ]
+
+
+async def read_batch(db: SupabaseClient, stock_nos: list[str]) -> dict[str, list[dict]]:
+    """一次批次讀取多檔 daily_closes，回傳 {stock_no: [oldest…newest]}。"""
+    if not stock_nos:
+        return {}
+    codes = ",".join(stock_nos)
+    limit = len(stock_nos) * _READ_LIMIT
+    raw = await db.get(
+        f"daily_closes?stock_no=in.({codes})&select=stock_no,trade_date,close,open,high,low,volume"
+        f"&order=stock_no,trade_date.desc&limit={limit}"
+    )
+    grouped: dict[str, list[dict]] = {}
+    for row in raw:
+        grouped.setdefault(str(row["stock_no"]), []).append(row)
+    # 每組已是 desc，_normalize_rows + reverse → asc
+    return {
+        code: _normalize_rows(list(reversed(rows)))
+        for code, rows in grouped.items()
+    }
 
 
 async def get_price_history(db: SupabaseClient, twse: TwseClient, stock_no: str, market: str | None) -> list[dict]:

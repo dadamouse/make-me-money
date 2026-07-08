@@ -225,8 +225,13 @@ class FakePostgrest:
         if method == "GET":
             results = [row for row in self.db[table] if match(row)]
             if params.get("order"):
-                field, _, direction = params.get("order").partition(".")
-                results = sorted(results, key=lambda row: str(row.get(field, "")), reverse=direction == "desc")
+                # 支援複合排序：stock_no,trade_date.desc
+                sort_keys = []
+                for part in params.get("order").split(","):
+                    field, _, direction = part.partition(".")
+                    sort_keys.append((field.strip(), direction.strip() == "desc"))
+                for field, desc in reversed(sort_keys):
+                    results = sorted(results, key=lambda row, f=field: str(row.get(f, "")), reverse=desc)
             if params.get("limit"):
                 results = results[: int(params.get("limit"))]
             return results

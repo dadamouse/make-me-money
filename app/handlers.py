@@ -13,7 +13,7 @@ from .flex import (
     build_picks_message,
     build_portfolio_message,
 )
-from .history import get_price_history, merge_realtime_bar
+from .history import get_price_history, merge_realtime_bar, read_batch
 from .indicators import compute_indicators
 from .market_health import build_market_health_message
 from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number, parse_command
@@ -206,17 +206,20 @@ async def build_portfolio_entries(deps: Deps, member: dict) -> list[dict]:
     broker_map = _latest_by_stock(
         await deps.db.get(f"daily_broker_flows?stock_no=in.({codes})&order=trade_date.desc&limit={recent_limit}")
     )
+    # 批次讀取所有持股歷史，1 次 HTTP 取代逐檔 N 次，避免 replyToken 超時
+    history_map = await read_batch(deps.db, [a["stock_no"] for a in aggregated])
+
     entries = []
     for agg in aggregated:
         info = info_map.get(agg["stock_no"], {})
+        history = history_map.get(agg["stock_no"], [])
         indicators = None
-        history = []
         try:
-            history = await get_price_history(deps.db, deps.twse, agg["stock_no"], info.get("market"))
-            indicators = compute_indicators(history)
+            if not history:
+                history = await get_price_history(deps.db, deps.twse, agg["stock_no"], info.get("market"))
+            indicators = compute_indicators(history) if history else None
         except Exception:
             logger.warning("技術指標計算失敗 stock_no=%s", agg["stock_no"], exc_info=True)
-        # 收盤價優先用自家資料庫（每日快照累積），避免逐檔打 TWSE 觸發限流
         if history:
             latest_quote = {"date": history[-1]["trade_date"], "close": history[-1]["close"]}
         else:
