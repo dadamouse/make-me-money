@@ -1,0 +1,28 @@
+app/main.py
+  s_d4fdd612f940f8::t_e828f7e17cfe38 17
+  s_d4fdd612f940f8::t_2e1b102d06a01e 366,369-385,387-392
+  s_d4fdd612f940f8::t_2a974e1368edcf 352
+  s_d4fdd612f940f8::t_5bd7b76f794067 10
+  s_d4fdd612f940f8::t_84ff9806c13226 386
+app/handlers.py
+  s_d4fdd612f940f8::t_fbfa2eebad20bd 34-40
+  s_d4fdd612f940f8::t_2fa0386583f227 4,6
+  s_d4fdd612f940f8::t_b2b0366dd0a010 289,294-318,320-335
+  s_d4fdd612f940f8::t_a88abfb45875ad 252-259
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "fa3d53ad9cd56fe29e68836a9359ccf9a15862b5",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
