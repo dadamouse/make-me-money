@@ -1,0 +1,19 @@
+app/main.py
+  s_d4fdd612f940f8::t_8b98716e768227 374
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "103be288e4d2ab8369da026e561eb86ba2d43a10",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
