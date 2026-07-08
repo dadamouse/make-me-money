@@ -120,6 +120,8 @@ def _stock_card(entry: dict) -> str:
         if margin.get("short_balance") is not None:
             text += f"｜融券 {format_number(margin['short_balance'])} 張"
         rows.append(_row("資券", text))
+    if entry.get("broker_flow_line"):
+        rows.append(_row("主力", escape(entry["broker_flow_line"])))
     if entry.get("holders_line"):
         rows.append(_row("籌碼", escape(entry["holders_line"])))
     return (

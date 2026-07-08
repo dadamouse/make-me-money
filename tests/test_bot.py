@@ -201,6 +201,7 @@ class FakePostgrest:
             "dividend_events": [],
             "daily_market": [],
             "weekly_holders": [],
+            "daily_broker_flows": [],
         }
         self._next_id = 1
 
@@ -327,6 +328,10 @@ class BotRuntime:
                 return httpx.Response(200, json={"tables": []})
             if url.startswith("https://opendata.tdcc.com.tw/"):
                 return httpx.Response(200, text=TDCC_CSV)
+            if url.startswith("https://fubon-ebrokerdj.fbs.com.tw/"):
+                from test_broker_flows import ZCO_HTML
+
+                return httpx.Response(200, content=ZCO_HTML.encode("cp950"))
             if url.startswith("https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"):
                 return httpx.Response(200, json=OTC_COMPANIES)
             if url.startswith("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"):

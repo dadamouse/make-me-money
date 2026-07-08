@@ -16,6 +16,7 @@ from .deps import Deps
 from .flex import build_picks_message
 from .handlers import build_portfolio_entries, handle_text, picks_web_url
 from .indicators import compute_indicators
+from .broker_flows import broker_flow_text, sync_broker_flows
 from .history import get_price_history
 from .holders import holders_summary_line, sync_holders
 from .line_client import LineClient, verify_signature
@@ -154,6 +155,8 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             "institutional": institutional[0] if institutional else None,
             "holders_line": await holders_summary_line(deps, stock_no),
         }
+        flows = await deps.db.get(f"daily_broker_flows?stock_no=eq.{stock_no}&order=trade_date.desc&limit=1")
+        entry["broker_flow_line"] = broker_flow_text(flows[0]) if flows else None
         return HTMLResponse(render_stock_html(entry))
 
     @app.get("/stock-chart/{stock_no}.png")
@@ -260,6 +263,14 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         pushed = await _broadcast(request, await build_open_brief(request.app.state.deps))
         logger.info("開盤前導航 pushed=%s", pushed)
         return {"ok": True, "pushed": pushed}
+
+    @app.post("/admin/sync-broker-flows")
+    async def sync_broker_flows_endpoint(request: Request) -> dict:
+        """平日晚間：抓持股的主力買賣超（MoneyDJ 分點頁，僅持股清單、間隔 2 秒）。"""
+        _check_cron_secret(request)
+        result = await sync_broker_flows(request.app.state.deps)
+        logger.info("主力買賣超同步完成 %s", result)
+        return {"ok": True, **result}
 
     @app.post("/admin/sync-holders")
     async def sync_holders_endpoint(request: Request) -> dict:

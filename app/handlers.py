@@ -203,6 +203,9 @@ async def build_portfolio_entries(deps: Deps, member: dict) -> list[dict]:
     institutional_map = _latest_by_stock(
         await deps.db.get(f"daily_institutional?stock_no=in.({codes})&order=trade_date.desc&limit={recent_limit}")
     )
+    broker_map = _latest_by_stock(
+        await deps.db.get(f"daily_broker_flows?stock_no=in.({codes})&order=trade_date.desc&limit={recent_limit}")
+    )
     entries = []
     for agg in aggregated:
         info = info_map.get(agg["stock_no"], {})
@@ -228,6 +231,7 @@ async def build_portfolio_entries(deps: Deps, member: dict) -> list[dict]:
                 "indicators": indicators,
                 "margin": margin_map.get(agg["stock_no"]),
                 "institutional": institutional_map.get(agg["stock_no"]),
+                "broker_flow": broker_map.get(agg["stock_no"]),
             }
         )
     return entries

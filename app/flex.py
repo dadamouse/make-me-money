@@ -88,6 +88,10 @@ def _signed(value: float) -> str:
     return f"{'+' if rounded >= 0 else ''}{format_number(rounded)}"
 
 
+def _signed_pct(value: float) -> str:
+    return f"{'+' if value >= 0 else ''}{value:.1f}%"
+
+
 def _signed_lots(shares_value: float) -> str:
     """買賣超股數 → 帶正負號的張數。"""
     return _signed(shares_value / 1000)
@@ -111,6 +115,13 @@ def _flow_rows(item: dict) -> list[dict]:
         spans.append({"type": "span", "text": f"法人 {_signed_lots(total)} 張", "color": _pnl_color(total), "weight": "bold"})
         if detail:
             spans.append({"type": "span", "text": f"（{detail}）", "color": MUTED_COLOR})
+    broker_flow = item.get("broker_flow")
+    if broker_flow and broker_flow.get("net_lots") is not None:
+        net = float(broker_flow["net_lots"])
+        text = f"主力 {_signed(net)} 張"
+        if broker_flow.get("concentration_pct") is not None:
+            text += f"（集中 {_signed_pct(float(broker_flow['concentration_pct']))}）"
+        spans.append({"type": "span", "text": ("　" if spans else "") + text, "color": _pnl_color(net), "weight": "bold"})
     margin = item.get("margin")
     if margin and margin.get("margin_balance") is not None:
         text = f"融資 {format_number(margin['margin_balance'])} 張"
