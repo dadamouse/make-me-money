@@ -360,6 +360,13 @@ class BotRuntime:
 
     def __enter__(self):
         self.client = self._client_ctx.__enter__()
+        # 對照表同步已改為背景執行，等它完成再開始測試（mock 環境毫秒級）
+        import time as _time
+
+        for _ in range(200):
+            if self.postgrest.db["stocks"]:
+                break
+            _time.sleep(0.01)
         return self
 
     def __exit__(self, *args):

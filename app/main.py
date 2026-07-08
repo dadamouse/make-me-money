@@ -60,11 +60,15 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             sign_key=cfg.line_channel_secret,
             http=http,
         )
-        try:
-            count = await sync_stocks(app.state.deps.db, app.state.deps.twse)
-            logger.info("已同步上市股票對照表 %s 筆", count)
-        except Exception:
-            logger.exception("啟動時同步股票對照表失敗，將沿用資料庫既有資料")
+        async def startup_sync() -> None:
+            """對照表同步移至背景＋總時限：外部 API 再慢再壞也不能擋住服務啟動。"""
+            try:
+                count = await asyncio.wait_for(sync_stocks(app.state.deps.db, app.state.deps.twse), timeout=300)
+                logger.info("已同步上市股票對照表 %s 筆", count)
+            except Exception:
+                logger.exception("啟動背景同步失敗，沿用資料庫既有資料（每日排程會補跑）")
+
+        app.state.startup_sync_task = asyncio.create_task(startup_sync())
         yield
         await http.aclose()
 
