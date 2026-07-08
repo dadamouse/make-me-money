@@ -106,6 +106,19 @@ async def _backfill(twse: TwseClient, stock_no: str, market: str | None) -> list
     return sorted(collected.values(), key=lambda row: row["trade_date"])
 
 
+def merge_realtime_bar(history: list[dict], bar: dict | None) -> list[dict]:
+    """把 MIS 即時報價拼成最後一根 K 棒（比庫存新則附加、同日則覆蓋）；不落地。"""
+    if not bar or bar.get("close") is None or not history:
+        return history
+    last_date = str(history[-1]["trade_date"])
+    if bar["trade_date"] > last_date:
+        return history + [bar]
+    if bar["trade_date"] == last_date:
+        merged = {**history[-1], **{k: v for k, v in bar.items() if v is not None}}
+        return history[:-1] + [merged]
+    return history
+
+
 async def get_price_history(db: SupabaseClient, twse: TwseClient, stock_no: str, market: str | None) -> list[dict]:
     """回傳由舊到新的 {trade_date, close, high, low}；不足 60 天時自動回補並寫回 daily_closes。"""
     rows = await _read(db, stock_no)

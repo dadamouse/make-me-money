@@ -13,7 +13,7 @@ from .flex import (
     build_picks_message,
     build_portfolio_message,
 )
-from .history import get_price_history
+from .history import get_price_history, merge_realtime_bar
 from .indicators import compute_indicators
 from .market_health import build_market_health_message
 from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number, parse_command
@@ -246,6 +246,8 @@ def stock_web_url(deps: Deps, stock_no: str) -> str:
 
 async def _render_chart_reply(deps: Deps, stock: dict) -> str | dict:
     history = await get_price_history(deps.db, deps.twse, stock["stock_no"], stock.get("market"))
+    # 點圖當下抓 MIS 即時價拼上最後一根 K 棒（盤中即時、盤後為當日收盤）
+    history = merge_realtime_bar(history, await deps.twse.fetch_realtime(stock["stock_no"], stock.get("market")))
     if len(history) < _MIN_CHART_ROWS:
         return f"❌ {_stock_label(stock)} 歷史資料不足，暫時畫不出線圖。"
     png = render_kline_png(history, f"{stock['stock_no']} {stock['name']}")
@@ -282,6 +284,7 @@ async def _handle_charts_all(deps: Deps, member: dict) -> str | dict:
         stock = info_map.get(code, {"stock_no": code, "name": code, "market": None})
         try:
             history = await get_price_history(deps.db, deps.twse, code, stock.get("market"))
+            history = merge_realtime_bar(history, await deps.twse.fetch_realtime(code, stock.get("market")))
             if len(history) < _MIN_CHART_ROWS:
                 skipped.append(code)
                 continue

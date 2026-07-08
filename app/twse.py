@@ -167,6 +167,46 @@ class TwseClient:
     async def fetch_otc_institutional(self) -> list[dict]:
         return await self._get_json(TPEX_INSTITUTIONAL_URL)
 
+    async def fetch_realtime(self, stock_no: str, market: str | None = None) -> dict | None:
+        """TWSE MIS 即時報價（盤中即時、盤後為當日收盤）→ 當日 K 棒。"""
+        prefixes = ["otc", "tse"] if market == MARKET_TPEX else ["tse", "otc"]
+        for prefix in prefixes:
+            try:
+                response = await self._http.get(
+                    "https://mis.twse.com.tw/stock/api/getStockInfo.jsp",
+                    params={"ex_ch": f"{prefix}_{stock_no}.tw", "json": "1", "delay": "0"},
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                response.raise_for_status()
+                items = response.json().get("msgArray") or []
+            except Exception:
+                logger.warning("MIS 即時報價失敗 stock_no=%s", stock_no, exc_info=True)
+                return None
+            if not items:
+                continue
+            item = items[0]
+
+            def _num(key: str) -> float | None:
+                try:
+                    return float(item.get(key))
+                except (TypeError, ValueError):
+                    return None
+
+            date_raw = str(item.get("d") or "")
+            close = _num("z")
+            if len(date_raw) != 8 or close is None:
+                return None
+            volume = _num("v")
+            return {
+                "trade_date": f"{date_raw[:4]}-{date_raw[4:6]}-{date_raw[6:8]}",
+                "close": close,
+                "open": _num("o"),
+                "high": _num("h"),
+                "low": _num("l"),
+                "volume": volume * 1000 if volume is not None else None,  # 張 → 股
+            }
+        return None
+
     async def fetch_market_month(self, year: int, month: int) -> dict:
         """TWSE FMTQIK 大盤月資料（加權指數＋成交金額）。"""
         await self._twse_throttle.wait(_TWSE_THROTTLE_SECONDS)

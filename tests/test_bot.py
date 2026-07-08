@@ -293,16 +293,20 @@ class BotRuntime:
                     },
                 )
             if url.startswith("https://mis.twse.com.tw/stock/api/getStockInfo.jsp"):
-                return httpx.Response(
-                    200,
-                    json={
-                        "rtcode": "0000",
-                        "msgArray": [
-                            {"c": "t00", "n": "發行量加權股價指數", "z": "45479.11", "y": "46556.39", "t": "08:35:00"},
-                            {"c": "2330", "n": "台積電", "z": "2440.0000", "y": "2460.0000", "t": "08:35:00"},
-                        ],
+                mis_fixtures = {
+                    "t00": {"c": "t00", "n": "發行量加權股價指數", "z": "45479.11", "y": "46556.39", "t": "08:35:00"},
+                    "2330": {
+                        "c": "2330", "n": "台積電", "z": "2440.0000", "y": "2460.0000", "t": "08:35:00",
+                        "d": "20260708", "o": "2450.0000", "h": "2470.0000", "l": "2430.0000", "v": "25000",
                     },
-                )
+                }
+                requested = request.url.params.get("ex_ch", "")
+                msgs = []
+                for channel in requested.split("|"):
+                    code = channel.split("_")[1].split(".")[0] if "_" in channel else channel
+                    if code in mis_fixtures:
+                        msgs.append(mis_fixtures[code])
+                return httpx.Response(200, json={"rtcode": "0000", "msgArray": msgs})
             if url.startswith("https://www.twse.com.tw/rwd/zh/fund/T86"):
                 return httpx.Response(200, json=LISTED_INSTITUTIONAL)
             if url.startswith("https://www.twse.com.tw/"):
@@ -569,6 +573,7 @@ def test_chart_command_returns_flex_with_served_image():
         assert image.content[:8] == b"\x89PNG\r\n\x1a\n"
         content = json.dumps(message["contents"], ensure_ascii=False)
         assert "MA20 " in content
+        assert '"text": "2,440"' in content  # 點圖當下的 MIS 即時價成為最後一根 K 棒
         # 單檔網頁版連結與頁面
         assert "/s/2330?sig=" in content
         from app.webview import stock_sig
