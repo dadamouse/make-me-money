@@ -14,11 +14,11 @@ from .chart import ChartStore, render_kline_png
 from .config import Settings, load_settings
 from .deps import Deps
 from .flex import build_picks_message
-from .handlers import build_portfolio_entries, handle_command, picks_web_url
+from .handlers import build_portfolio_entries, handle_text, picks_web_url
 from .history import get_price_history
 from .line_client import LineClient, verify_signature
 from .market_health import build_market_health
-from .parser import parse_command, summarize_portfolio
+from .parser import summarize_portfolio
 from .pending import PendingChoices
 from .premarket import build_macro_brief, build_open_brief
 from .screener import format_picks_message, has_picks, run_daily_picks
@@ -302,11 +302,11 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             if event.get("type") != "message" or (event.get("message") or {}).get("type") != "text":
                 continue
             line_user_id = (event.get("source") or {}).get("userId")
-            cmd = parse_command(event["message"]["text"])
+            text = event["message"]["text"]
             try:
-                reply_text = await handle_command(request.app.state.deps, line_user_id, cmd)
+                reply_text = await handle_text(request.app.state.deps, line_user_id, text)
             except Exception as error:
-                logger.exception("指令處理失敗 cmd=%s", cmd)
+                logger.exception("指令處理失敗 text=%s", text[:100])
                 reply_text = f"⚠️ 系統錯誤：{error}"
             try:
                 await request.app.state.line.reply(event["replyToken"], reply_text)

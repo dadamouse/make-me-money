@@ -16,7 +16,7 @@ from .flex import (
 from .history import get_price_history
 from .indicators import compute_indicators
 from .market_health import build_market_health
-from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number
+from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number, parse_command
 from .screener import format_picks_message, run_daily_picks
 from .webview import picks_sig, portfolio_sig
 
@@ -436,6 +436,41 @@ async def _handle_news(deps: Deps, member: dict) -> str:
     return "\n".join(lines)
 
 
+_BATCH_MAX_LINES = 30
+
+
+async def handle_text(deps: Deps, line_user_id: str | None, text: str) -> str | dict:
+    """單行走一般指令；多行訊息逐行執行（批次新增/刪除用）。"""
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    if len(lines) <= 1:
+        return await handle_command(deps, line_user_id, parse_command(text))
+    replies = []
+    for line in lines[:_BATCH_MAX_LINES]:
+        result = await handle_command(deps, line_user_id, parse_command(line))
+        replies.append(result if isinstance(result, str) else "（卡片類指令請單獨輸入）")
+    if len(lines) > _BATCH_MAX_LINES:
+        replies.append(f"⚠️ 一次最多處理 {_BATCH_MAX_LINES} 行，其餘 {len(lines) - _BATCH_MAX_LINES} 行未執行")
+    return "\n".join(replies)
+
+
+async def _handle_clear(deps: Deps, line_user_id: str, member: dict) -> str:
+    rows = await deps.db.get(f"holdings?member_id=eq.{member['id']}&select=id")
+    if not rows:
+        return f"{member['name']} 目前沒有任何持股紀錄。"
+    deps.pending.put(line_user_id, {"action": "clear_all", "member_id": member["id"]})
+    return f"⚠️ 即將刪除「{member['name']}」的全部 {len(rows)} 筆持股紀錄，回覆「確認」執行（5 分鐘內有效）。"
+
+
+async def _handle_confirm(deps: Deps, line_user_id: str, member: dict) -> str:
+    pending_item = deps.pending.pop(line_user_id)
+    if not pending_item or pending_item.get("action") != "clear_all":
+        return "目前沒有待確認的操作。"
+    if pending_item.get("member_id") != member["id"]:
+        return "身份已切換，已取消清空操作。"
+    deleted = await deps.db.delete(f"holdings?member_id=eq.{member['id']}")
+    return f"🗑 已清空「{member['name']}」的持股，共刪除 {len(deleted)} 筆。"
+
+
 async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> str | dict:
     if not line_user_id:
         return HELP_TEXT
@@ -474,6 +509,10 @@ async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> 
         return await _handle_chart(deps, line_user_id, cmd)
     if cmd.action == "charts_all":
         return await _handle_charts_all(deps, member)
+    if cmd.action == "clear":
+        return await _handle_clear(deps, line_user_id, member)
+    if cmd.action == "confirm":
+        return await _handle_confirm(deps, line_user_id, member)
     if cmd.action == "volume_rank":
         return await _handle_volume_rank(deps)
     if cmd.action == "picks":

@@ -736,6 +736,42 @@ def test_backfill_history_endpoint():
         assert status["done"] == status["total"] == 7
 
 
+def test_batch_add_multiline():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("新增 2330 40 2263.2\n新增 3231 3000 82.52\n新增 5274 100 3000\n我的股票")
+        reply = rt.last_reply()
+        assert "已為 dada 新增 台積電（2330・上市）40 股＠2,263.2" in reply
+        assert "已為 dada 新增 緯創（3231・上市）3,000 股＠82.52" in reply
+        assert "已為 dada 新增 信驊（5274・上櫃）100 股＠3,000" in reply
+        assert "（卡片類指令請單獨輸入）" in reply  # 我的股票回卡片，批次中提示單獨輸入
+        assert len(rt.postgrest.db["holdings"]) == 3
+
+
+def test_clear_all_requires_confirmation():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("新增2330 1000 850")
+        rt.send("新增3231")
+        rt.send("清空持股")
+        assert "即將刪除「dada」的全部 2 筆持股紀錄，回覆「確認」執行" in rt.last_reply()
+        assert len(rt.postgrest.db["holdings"]) == 2  # 尚未刪除
+
+        rt.send("確認")
+        assert "已清空「dada」的持股，共刪除 2 筆" in rt.last_reply()
+        assert rt.postgrest.db["holdings"] == []
+
+        rt.send("確認")  # 沒有待確認操作
+        assert "目前沒有待確認的操作" in rt.last_reply()
+
+
+def test_clear_without_holdings():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("清空持股")
+        assert "沒有任何持股紀錄" in rt.last_reply()
+
+
 def test_requires_login_and_shows_help():
     with BotRuntime() as rt:
         rt.send("我的股票")
