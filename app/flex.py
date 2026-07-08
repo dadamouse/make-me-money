@@ -33,7 +33,8 @@ def _stock_block(item: dict) -> dict:
             _text(f"{item['stock_no']} {item['name']}", size="sm", weight="bold", color=TITLE_COLOR, flex=5, wrap=True),
             _text(
                 format_number(quote["close"]) if quote else "查無報價",
-                size="sm",
+                size="md" if quote else "sm",
+                weight="bold",
                 align="end",
                 color=TITLE_COLOR if quote else MUTED_COLOR,
                 flex=3,
@@ -54,11 +55,16 @@ def _stock_block(item: dict) -> dict:
         if item["pnl"] is not None:
             sign = sign_of(item["pnl"])
             rows.append(
-                _text(
-                    f"{sign}{format_number(item['pnl'])}（{sign}{item['pct']:.1f}%）",
-                    size="xs",
-                    align="end",
-                    color=_pnl_color(item["pnl"]),
+                _row(
+                    _text("損益", size="xs", color=MUTED_COLOR, flex=2),
+                    _text(
+                        f"{sign}{format_number(item['pnl'])}（{sign}{item['pct']:.1f}%）",
+                        size="sm",
+                        weight="bold",
+                        align="end",
+                        color=_pnl_color(item["pnl"]),
+                        flex=6,
+                    ),
                 )
             )
     else:
@@ -69,6 +75,8 @@ def _stock_block(item: dict) -> dict:
         "type": "box",
         "layout": "vertical",
         "spacing": "xs",
+        "paddingTop": "6px",
+        "paddingBottom": "6px",
         # 點整個持股區塊 → 自動送出「圖XXXX」看技術分析圖
         "action": {"type": "message", "label": item["stock_no"], "text": f"圖{item['stock_no']}"},
         "contents": rows,
@@ -86,11 +94,12 @@ def _signed_lots(shares_value: float) -> str:
 
 
 def _flow_rows(item: dict) -> list[dict]:
-    """三大法人買賣超與融資融券各一行；沒資料就省略。"""
-    rows = []
+    """三大法人與融資融券濃縮成一行（法人合計依買賣超上色）。"""
+    spans = []
     institutional = item.get("institutional")
     if institutional and institutional.get("total_net") is not None:
-        parts = [
+        total = institutional["total_net"]
+        detail = "｜".join(
             f"{label}{_signed_lots(value)}"
             for label, value in (
                 ("外資", institutional.get("foreign_net")),
@@ -98,25 +107,23 @@ def _flow_rows(item: dict) -> list[dict]:
                 ("自營", institutional.get("dealer_net")),
             )
             if value is not None
-        ]
-        total = institutional["total_net"]
-        rows.append(
-            _text(f"法人 {_signed_lots(total)} 張（{'｜'.join(parts)}）", size="xxs", color=_pnl_color(total))
         )
+        spans.append({"type": "span", "text": f"法人 {_signed_lots(total)} 張", "color": _pnl_color(total), "weight": "bold"})
+        if detail:
+            spans.append({"type": "span", "text": f"（{detail}）", "color": MUTED_COLOR})
     margin = item.get("margin")
     if margin and margin.get("margin_balance") is not None:
-        margin_change = margin.get("margin_change")
-        short_balance = margin.get("short_balance")
         text = f"融資 {format_number(margin['margin_balance'])} 張"
-        if margin_change is not None:
-            text += f"（{_signed(margin_change)}）"
-        if short_balance is not None:
-            text += f"｜融券 {format_number(short_balance)} 張"
-            short_change = margin.get("short_change")
-            if short_change is not None:
-                text += f"（{_signed(short_change)}）"
-        rows.append(_text(text, size="xxs", color=MUTED_COLOR))
-    return rows
+        if margin.get("margin_change") is not None:
+            text += f"（{_signed(margin['margin_change'])}）"
+        if margin.get("short_balance") is not None:
+            text += f"｜融券 {format_number(margin['short_balance'])} 張"
+            if margin.get("short_change") is not None:
+                text += f"（{_signed(margin['short_change'])}）"
+        spans.append({"type": "span", "text": ("　" if spans else "") + text, "color": MUTED_COLOR})
+    if not spans:
+        return []
+    return [{"type": "text", "size": "xxs", "wrap": True, "contents": spans}]
 
 
 def _indicator_rows(item: dict, close: float) -> list[dict]:
@@ -143,44 +150,37 @@ def _indicator_rows(item: dict, close: float) -> list[dict]:
     return rows
 
 
-def _header(member_name: str, date_label: str | None) -> dict:
-    contents = [_text(f"📊 {member_name} 的持股", size="lg", weight="bold", color="#FFFFFF")]
+def _header(member_name: str, date_label: str | None, summary: dict | None = None) -> dict:
+    """漸層色標題區：名稱＋總市值（大字）＋總損益（上色）＋收盤日。"""
+    contents = [_text(f"📊 {member_name} 的持股", size="md", weight="bold", color="#FFFFFF")]
+    if summary and summary["total_value"] > 0:
+        contents.append(
+            _text(f"總市值 {format_number(summary['total_value'])}", size="xxl", weight="bold", color="#FFFFFF", margin="sm")
+        )
+        if summary["total_pnl"] is not None and summary["total_cost"] > 0:
+            pnl = summary["total_pnl"]
+            pct = pnl / summary["total_cost"] * 100
+            contents.append(
+                _text(
+                    f"總損益 {sign_of(pnl)}{format_number(pnl)}（{sign_of(pnl)}{pct:.1f}%）",
+                    size="sm",
+                    weight="bold",
+                    color="#FF8A80" if pnl >= 0 else "#B9F6CA",  # 深底上的亮紅/亮綠
+                )
+            )
     if date_label:
-        contents.append(_text(f"收盤日 {date_label}", size="xs", color=HEADER_SUB_COLOR, margin="xs"))
-    return {"type": "box", "layout": "vertical", "backgroundColor": HEADER_BG, "paddingAll": "16px", "contents": contents}
+        contents.append(_text(f"收盤日 {date_label}", size="xs", color=HEADER_SUB_COLOR, margin="sm"))
+    return {
+        "type": "box",
+        "layout": "vertical",
+        "paddingAll": "20px",
+        "background": {"type": "linearGradient", "angle": "135deg", "startColor": "#1A237E", "endColor": "#3949AB"},
+        "contents": contents,
+    }
 
 
 def _link_button(url: str, label: str) -> dict:
     return {"type": "button", "style": "link", "height": "sm", "action": {"type": "uri", "label": label, "uri": url}}
-
-
-def _footer(summary: dict, portfolio_link: str | None = None) -> dict:
-    rows = [
-        _row(
-            _text("總市值", size="sm", color=MUTED_COLOR, flex=3),
-            _text(format_number(summary["total_value"]), size="sm", weight="bold", color=TITLE_COLOR, align="end", flex=5),
-        )
-    ]
-    total_pnl = summary["total_pnl"]
-    if total_pnl is not None:
-        sign = sign_of(total_pnl)
-        pct = total_pnl / summary["total_cost"] * 100
-        rows.append(
-            _row(
-                _text("總損益", size="sm", color=MUTED_COLOR, flex=3),
-                _text(
-                    f"{sign}{format_number(total_pnl)}（{sign}{pct:.1f}%）",
-                    size="sm",
-                    weight="bold",
-                    color=_pnl_color(total_pnl),
-                    align="end",
-                    flex=5,
-                ),
-            )
-        )
-    if portfolio_link:
-        rows.append(_link_button(portfolio_link, "🔗 開啟網頁版"))
-    return {"type": "box", "layout": "vertical", "spacing": "sm", "paddingAll": "16px", "contents": rows}
 
 
 def _industry_sections(items: list[dict]) -> list[dict]:
@@ -337,12 +337,16 @@ def build_portfolio_message(member_name: str, entries: list[dict], portfolio_lin
     bubble = {
         "type": "bubble",
         "size": "mega",
-        "header": _header(member_name, format_roc_date(first_quote["date"]) if first_quote else None),
+        "header": _header(member_name, format_roc_date(first_quote["date"]) if first_quote else None, summary),
         "body": {"type": "box", "layout": "vertical", "spacing": "md", "contents": blocks},
         "styles": {"footer": {"separator": True}},
     }
-    if summary["total_value"] > 0 or portfolio_link:
-        bubble["footer"] = _footer(summary, portfolio_link)
+    if portfolio_link:
+        bubble["footer"] = {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [_link_button(portfolio_link, "🔗 開啟網頁版")],
+        }
     return {
         "type": "flex",
         "altText": format_portfolio(member_name, entries)[:_ALT_TEXT_MAX],
