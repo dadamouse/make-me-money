@@ -65,7 +65,14 @@ def _stock_block(item: dict) -> dict:
         rows.append(_text(f"{market_prefix}觀察中（未記股數）", size="xs", color=MUTED_COLOR))
     rows += _indicator_rows(item, quote["close"])
     rows += _flow_rows(item)
-    return {"type": "box", "layout": "vertical", "spacing": "xs", "contents": rows}
+    return {
+        "type": "box",
+        "layout": "vertical",
+        "spacing": "xs",
+        # 點整個持股區塊 → 自動送出「圖XXXX」看技術分析圖
+        "action": {"type": "message", "label": item["stock_no"], "text": f"圖{item['stock_no']}"},
+        "contents": rows,
+    }
 
 
 def _signed(value: float) -> str:

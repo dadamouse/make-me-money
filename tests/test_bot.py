@@ -533,6 +533,7 @@ def test_list_shows_indicators_institutional_and_margin():
         assert "／J " in content
         assert "法人 +5,500 張（外資+5,000｜投信+1,000｜自營-500）" in content
         assert "融資 25,000 張（+1,000）｜融券 500 張（-100）" in content
+        assert '"text": "圖2330"' in content  # 點持股區塊可看該股線圖
 
 
 def test_chart_command_returns_flex_with_served_image():
