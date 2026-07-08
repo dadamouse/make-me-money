@@ -1,0 +1,26 @@
+app/flex.py
+  s_d4fdd612f940f8::t_a58d11db6577f4 36-37,58-67,78-79
+  s_d4fdd612f940f8::t_3b9a5e24f34a56 153-158,160-163,165,168-169,171-179
+  s_d4fdd612f940f8::t_9280dbf8f437c2 97-98,101-102,111-113,117-126
+  s_d4fdd612f940f8::t_016e396210ecd8 340,344-349
+  s_d4fdd612f940f8::t_ae1a6c2c777f80 180-182
+  s_d4fdd612f940f8::t_6c9fc459aa74e3 183
+tests/test_bot.py
+  s_d4fdd612f940f8::t_9522e59a7549be 534-535
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d770927ae2585cbde4f79397031dcd42430ffbc4",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
