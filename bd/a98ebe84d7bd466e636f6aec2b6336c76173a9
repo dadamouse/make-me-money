@@ -1,0 +1,51 @@
+app/handlers.py
+  s_d4fdd612f940f8::t_e063bb094d2f04 256,258-263
+  s_d4fdd612f940f8::t_e7e67ee571abe5 17
+app/webview.py
+  s_d4fdd612f940f8::t_dc06c03ff8e6ab 123-124
+tests/test_bot.py
+  s_d4fdd612f940f8::t_12f23947abd85f 633
+  s_d4fdd612f940f8::t_849283c50acced 167-170,173-181
+  s_d4fdd612f940f8::t_2838a17b6407af 203
+  s_d4fdd612f940f8::t_0c56fdd4040e60 324-325
+  s_d4fdd612f940f8::t_a57a3f04b3541f 182
+supabase/schema.sql
+  s_d4fdd612f940f8::t_d567a641080cbd 433-479
+tests/test_holders.py
+  s_d4fdd612f940f8::t_36600cd97c40df 1-76
+app/holders.py
+  s_d4fdd612f940f8::t_7867eda157a56a 1-75
+supabase/cron.sql
+  s_d4fdd612f940f8::t_d567a641080cbd 128-140
+supabase/migrations/20260708_weekly_holders.sql
+  s_d4fdd612f940f8::t_2907829b839bbd 1-46
+app/main.py
+  s_d4fdd612f940f8::t_52efeb2bd7566c 155
+  s_d4fdd612f940f8::t_16ff9b89b2240e 20
+  s_d4fdd612f940f8::t_cc4ab7d43d170a 264-271
+app/screener.py
+  s_d4fdd612f940f8::t_36844f4d6aa996 161-162
+  s_d4fdd612f940f8::t_d860a1052ca462 59-66
+  s_d4fdd612f940f8::t_f4dc5c64647efc 136-143
+  s_d4fdd612f940f8::t_b48f7ac3abbb9d 167,173
+  s_d4fdd612f940f8::t_6da24ce1d36941 135
+app/flex.py
+  s_d4fdd612f940f8::t_0c4bc677903b6d 211,224-225
+  s_d4fdd612f940f8::t_da9783a8522ad0 242-247,253
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "bda98ebe84d7bd466e636f6aec2b6336c76173a9",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
