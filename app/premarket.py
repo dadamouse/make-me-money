@@ -23,7 +23,6 @@ MACRO_INDICES = (
 )
 TSM_ADR_SYMBOL = "TSM"
 USDTWD_SYMBOL = "USDTWD=X"
-_ADR_SHARES_PER_UNIT = 5  # 1 單位 TSM ADR = 5 股台積電
 
 _MIS_URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
 _MIS_CODES = "tse_t00.tw|tse_2330.tw"  # 加權指數＋台積電（8:30-9:00 回試撮價）
@@ -197,25 +196,9 @@ async def build_open_brief(deps: Deps) -> str:
     now = datetime.now(_TAIPEI_TZ)
     lines = [f"📣 開盤前導航（{now.strftime('%m/%d %H:%M')}）", ""]
 
-    adr = await fetch_quote(deps.http, TSM_ADR_SYMBOL)
-    fx = await fetch_quote(deps.http, USDTWD_SYMBOL)
-    tsmc = await deps.db.get("daily_closes?stock_no=eq.2330&select=close&order=trade_date.desc&limit=1")
-    lines.append("【ADR 隱含開盤】")
-    premium = None
-    if adr and fx and tsmc:
-        implied = adr["price"] * fx["price"] / _ADR_SHARES_PER_UNIT
-        last_close = float(tsmc[0]["close"])
-        premium = (implied - last_close) / last_close * 100
-        lines.append(
-            f"台積電 ADR {adr['price']:.2f} 美元 × 匯率 {fx['price']:.2f} ÷ {_ADR_SHARES_PER_UNIT}"
-            f" ≈ {format_number(implied)} 元"
-        )
-        lines.append(f"對昨收 {format_number(last_close)}：{sign_of(premium)}{premium:.1f}%（正=偏開高、負=偏開低）")
-    else:
-        lines.append("ADR 或匯率資料暫缺，無法估算")
-
+    # 注：曾有「ADR 隱含開盤價」換算，因 TSM ADR 存在 15-25% 常態溢價，
+    # 絕對換算值無預測意義而移除；方向參考用 8:05 的 ADR 漲跌%＋此處的試撮實價。
     trial = await fetch_trial_quotes(deps.http)
-    lines.append("")
     lines.append("【台股試撮（8:30-9:00 模擬撮合）】")
     trial_index = trial.get("t00")
     index_line = _trial_line("加權指數", trial_index)
@@ -255,13 +238,6 @@ async def build_open_brief(deps: Deps) -> str:
             lines.append(f"・試撮指數 +{trial_pct:.1f}% → 開盤偏強，留意是否開高走低")
         else:
             lines.append("・試撮指數接近平盤 → 開盤方向不明，看首 15 分鐘量能")
-    if premium is not None:
-        if premium >= 2:
-            lines.append(f"・ADR 隱含台積電開高約 {premium:.1f}% → 大盤開盤偏強；但溢價過大常會收斂，開高走低要留意")
-        elif premium <= -2:
-            lines.append(f"・ADR 隱含台積電開低約 {abs(premium):.1f}% → 大盤開盤承壓；恐慌開低有時反而是低接機會")
-        else:
-            lines.append("・ADR 隱含台積電平盤附近開出 → 開盤方向看盤中量能")
     summary_rows2 = await deps.db.rpc("market_daily_summary", {})
     if summary_rows2 and summary_rows2[0].get("institutional_net") is not None:
         net = float(summary_rows2[0]["institutional_net"])
