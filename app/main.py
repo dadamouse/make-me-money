@@ -15,9 +15,10 @@ from .config import Settings, load_settings
 from .deps import Deps
 from .flex import build_picks_message
 from .handlers import build_portfolio_entries, handle_text, picks_web_url
+from .indicators import compute_indicators
 from .history import get_price_history
 from .line_client import LineClient, verify_signature
-from .market_health import build_market_health
+from .market_health import build_market_health_message
 from .parser import summarize_portfolio
 from .pending import PendingChoices
 from .premarket import build_macro_brief, build_open_brief
@@ -25,7 +26,14 @@ from .screener import format_picks_message, has_picks, run_daily_picks
 from .snapshot import run_snapshot
 from .supabase import SupabaseClient
 from .twse import TwseClient, sync_stocks
-from .webview import render_picks_html, render_portfolio_html, verify_picks_sig, verify_portfolio_sig
+from .webview import (
+    render_picks_html,
+    render_portfolio_html,
+    render_stock_html,
+    verify_picks_sig,
+    verify_portfolio_sig,
+    verify_stock_sig,
+)
 from .weekly import build_weekly_outlook, build_weekly_report
 
 _STOCK_NO_PATTERN = re.compile(r"[0-9]{4,6}[A-Z]?")
@@ -119,6 +127,32 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         result = await run_daily_picks(deps)
         _prefetch_pick_charts(request, result)
         return HTMLResponse(render_picks_html(result))
+
+    @app.get("/s/{stock_no}")
+    async def stock_page(stock_no: str, request: Request, sig: str = "") -> HTMLResponse:
+        """單檔個股網頁：現價、指標、法人、資券＋技術分析圖。"""
+        deps = request.app.state.deps
+        if not verify_stock_sig(stock_no, deps.sign_key, sig):
+            raise HTTPException(status_code=403, detail="invalid signature")
+        stocks = await deps.db.get(f"stocks?stock_no=eq.{stock_no}&select=stock_no,name,industry,market")
+        stock = stocks[0] if stocks else {"stock_no": stock_no, "name": stock_no, "market": None, "industry": None}
+        history = await get_price_history(deps.db, deps.twse, stock_no, stock.get("market"))
+        if not history:
+            raise HTTPException(status_code=404, detail="no data")
+        margins = await deps.db.get(
+            f"daily_margins?stock_no=eq.{stock_no}&order=trade_date.desc&limit=1"
+        )
+        institutional = await deps.db.get(
+            f"daily_institutional?stock_no=eq.{stock_no}&order=trade_date.desc&limit=1"
+        )
+        entry = {
+            **stock,
+            "quote": {"date": history[-1]["trade_date"], "close": history[-1]["close"]},
+            "indicators": compute_indicators(history),
+            "margin": margins[0] if margins else None,
+            "institutional": institutional[0] if institutional else None,
+        }
+        return HTMLResponse(render_stock_html(entry))
 
     @app.get("/stock-chart/{stock_no}.png")
     async def stock_chart_image(stock_no: str, request: Request) -> Response:
@@ -269,7 +303,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             bindings = await deps.db.get("line_bindings?select=line_user_id")
             user_ids = [b["line_user_id"] for b in bindings]
             if user_ids:
-                health = await build_market_health(deps)
+                health = await build_market_health_message(deps)
                 message = build_picks_message(result, format_picks_message(result), picks_web_url(deps))
                 await request.app.state.line.multicast(user_ids, [health, message])
                 pushed = len(user_ids)

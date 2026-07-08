@@ -23,6 +23,14 @@ def verify_picks_sig(sign_key: str, provided: str | None) -> bool:
     return bool(provided) and hmac.compare_digest(picks_sig(sign_key), provided)
 
 
+def stock_sig(stock_no: str, sign_key: str) -> str:
+    return hmac.new(sign_key.encode(), f"stock:{stock_no}".encode(), hashlib.sha256).hexdigest()[:16]
+
+
+def verify_stock_sig(stock_no: str, sign_key: str, provided: str | None) -> bool:
+    return bool(provided) and hmac.compare_digest(stock_sig(stock_no, sign_key), provided)
+
+
 _CSS = """
 body{font-family:-apple-system,'Noto Sans TC',sans-serif;background:#f2f4f8;margin:0;padding:16px;color:#333}
 h1{font-size:20px;margin:8px 4px 16px}
@@ -165,6 +173,21 @@ def render_picks_html(result: dict) -> str:
 <h1>🎯 每日選股（{escape(result['date'])}）</h1>
 {''.join(sections_html)}
 <footer>僅供參考，非投資建議・make-me-money</footer>
+</body></html>"""
+
+
+def render_stock_html(entry: dict) -> str:
+    """單檔個股頁：現價、指標、法人、資券＋滿版技術分析圖。"""
+    title = f"{entry['stock_no']} {entry['name']}"
+    return f"""<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{escape(title)}</title><style>{_CSS}</style></head>
+<body>
+<h1>📈 {escape(title)}</h1>
+{_stock_card(entry)}
+<footer>資料為最近交易日收盤・僅供參考，非投資建議</footer>
 </body></html>"""
 
 

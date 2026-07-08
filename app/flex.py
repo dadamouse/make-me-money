@@ -194,7 +194,14 @@ def _industry_sections(items: list[dict]) -> list[dict]:
     return blocks
 
 
-def build_chart_bubble(stock: dict, image_url: str, close: float | None, indicators: dict | None, size: str = "giga") -> dict:
+def build_chart_bubble(
+    stock: dict,
+    image_url: str,
+    close: float | None,
+    indicators: dict | None,
+    size: str = "giga",
+    page_url: str | None = None,
+) -> dict:
     """K 線圖卡片 bubble：hero 放圖、body 放收盤價與技術指標摘要。"""
     title = f"{stock['stock_no']} {stock['name']}"
     market = f"・{stock['market']}" if stock.get("market") else ""
@@ -206,20 +213,29 @@ def build_chart_bubble(stock: dict, image_url: str, close: float | None, indicat
     ]
     if close is not None:
         body_rows += _indicator_rows({"indicators": indicators}, close)
-    return {
+    bubble = {
         "type": "bubble",
         "size": size,
         "hero": {"type": "image", "url": image_url, "size": "full", "aspectRatio": "16:13", "aspectMode": "fit"},
         "body": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": body_rows},
     }
+    if page_url:
+        bubble["footer"] = {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [_link_button(page_url, "🔗 開啟網頁版")],
+        }
+    return bubble
 
 
-def build_chart_message(stock: dict, image_url: str, close: float | None, indicators: dict | None) -> dict:
+def build_chart_message(
+    stock: dict, image_url: str, close: float | None, indicators: dict | None, page_url: str | None = None
+) -> dict:
     title = f"{stock['stock_no']} {stock['name']}"
     return {
         "type": "flex",
         "altText": f"{title} K線圖",
-        "contents": build_chart_bubble(stock, image_url, close, indicators),
+        "contents": build_chart_bubble(stock, image_url, close, indicators, page_url=page_url),
     }
 
 

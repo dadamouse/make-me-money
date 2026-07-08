@@ -81,6 +81,47 @@ def _indicator_addplots(rows: list[dict]) -> tuple[list, tuple]:
     return addplots, tuple(panel_ratios)
 
 
+def render_index_png(rows: list[dict], title: str = "加權指數") -> bytes:
+    """大盤走勢圖：rows 由舊到新 {trade_date, taiex, amount} → 指數線＋MA20/MA60＋成交金額柱。"""
+    import matplotlib.dates as mdates
+    import matplotlib.pyplot as plt
+
+    dates = [pd.to_datetime(r["trade_date"]) for r in rows]
+    closes = [float(r["taiex"]) for r in rows]
+    amounts = [float(r["amount"]) / 1e8 if r.get("amount") is not None else 0.0 for r in rows]  # 億元
+
+    def moving_average(n: int) -> list[float | None]:
+        return [sum(closes[i - n + 1 : i + 1]) / n if i >= n - 1 else None for i in range(len(closes))]
+
+    with plt.rc_context(
+        {"font.sans-serif": ["Noto Sans CJK TC", "PingFang TC", "Heiti TC", "Arial Unicode MS", "sans-serif"],
+         "axes.unicode_minus": False}
+    ):
+        fig, (ax_price, ax_volume) = plt.subplots(
+            2, 1, figsize=(9.6, 6.4), sharex=True, gridspec_kw={"height_ratios": [3, 1]}, dpi=110
+        )
+        up = closes[-1] >= closes[0]
+        ax_price.plot(dates, closes, color="#E53935" if up else "#43A047", linewidth=1.6, label="指數")
+        for n, color in ((20, "#1E88E5"), (60, "#FB8C00")):
+            ma = moving_average(n)
+            if any(v is not None for v in ma):
+                ax_price.plot(dates, [v if v is not None else float("nan") for v in ma],
+                              color=color, linewidth=1, label=f"MA{n}")
+        ax_price.legend(loc="upper left", fontsize=8)
+        ax_price.set_title(title)
+        ax_price.grid(alpha=0.3)
+        bar_colors = ["#E53935" if i > 0 and closes[i] >= closes[i - 1] else "#43A047" for i in range(len(closes))]
+        ax_volume.bar(dates, amounts, color=bar_colors, width=0.8)
+        ax_volume.set_ylabel("成交金額(億)")
+        ax_volume.grid(alpha=0.3)
+        ax_volume.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
+        fig.tight_layout()
+        buffer = io.BytesIO()
+        fig.savefig(buffer, format="png", bbox_inches="tight")
+        plt.close(fig)
+    return buffer.getvalue()
+
+
 def render_kline_png(rows: list[dict], title: str) -> bytes:
     """rows 由舊到新：{trade_date, open, high, low, close, volume}
     → K 線＋MA＋成交量＋KDJ＋RSI 多面板 PNG。

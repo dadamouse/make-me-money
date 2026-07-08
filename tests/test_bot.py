@@ -550,6 +550,15 @@ def test_chart_command_returns_flex_with_served_image():
         assert image.content[:8] == b"\x89PNG\r\n\x1a\n"
         content = json.dumps(message["contents"], ensure_ascii=False)
         assert "MA20 " in content
+        # 單檔網頁版連結與頁面
+        assert "/s/2330?sig=" in content
+        from app.webview import stock_sig
+
+        page = rt.client.get(f"/s/2330?sig={stock_sig('2330', 'channel-secret')}")
+        assert page.status_code == 200
+        assert "2330 台積電" in page.text
+        assert "/stock-chart/2330.png" in page.text
+        assert rt.client.get("/s/2330?sig=bogus").status_code == 403
 
 
 def test_chart_command_with_insufficient_history():
@@ -662,7 +671,8 @@ def test_daily_picks_push_endpoint():
         assert payload["pushed"] == 1
         push = rt.replies[-1]
         assert push["to"] == ["U-test"]
-        assert push["messages"][0]["type"] == "text"  # 第一則：大盤體檢
+        assert push["messages"][0]["type"] == "flex"  # 第一則：大盤體檢卡片（含走勢圖）
+        assert "大盤體檢" in push["messages"][0]["altText"]
         assert push["messages"][1]["type"] == "flex"  # 第二則：選股卡片
         assert "🎯 每日選股" in push["messages"][1]["altText"]
 
@@ -672,25 +682,35 @@ def test_daily_picks_push_endpoint():
 def test_market_health_command():
     with BotRuntime() as rt:
         rt.send("體檢")  # 不需登入；「大盤」「6」也可
-        text = rt.last_reply()
-        assert "📋 大盤體檢（07/07）" in text
-        assert "加權指數 45,479.11（-2.3%）" in text
-        assert "位置：月線下方 1.1%" in text
-        assert "量能：5 日均量的 1.05 倍" in text
-        assert "大盤 RSI14：" in text
-        assert "匯率：美元/台幣 32.00（+0.31%，台幣貶）" in text
-        assert "法人：今日 -242,259 張（連 1 日賣超）" in text
-        assert "融資：-42,283 張｜5 日累計 +175,355 張（資料日 07/06）" in text
-        assert "寬度：漲 1,177 家／跌 965 家｜創20日新高 339／新低 55" in text
-        assert "VIX 恐慌指數：18.5（+12.1%）" in text
+        message = rt.last_message()
+        assert message["type"] == "flex"
+        assert message["altText"].startswith("📋 大盤體檢（07/07）")
+        bubble = message["contents"]
+        assert bubble["hero"]["url"].startswith("http://testserver/charts/")  # 加權指數走勢圖
+        content = json.dumps(bubble, ensure_ascii=False)
+        assert "📋 大盤體檢（07/07）" in content
+        assert "加權指數 45,479.11（-2.3%）" in content
+        assert "位置：月線下方 1.1%" in content
+        assert "量能：5 日均量的 1.05 倍" in content
+        assert "大盤 RSI14：" in content
+        assert "匯率：美元/台幣 32.00（+0.31%，台幣貶）" in content
+        assert "法人：今日 -242,259 張（連 1 日賣超）" in content
+        assert "融資：-42,283 張｜5 日累計 +175,355 張（資料日 07/06）" in content
+        assert "寬度：漲 1,177 家／跌 965 家｜創20日新高 339／新低 55" in content
+        assert "VIX 恐慌指數：18.5（+12.1%）" in content
         # 白話解讀（描述現況、不做預測）
-        assert "【📖 白話解讀】" in text
-        assert "指數收在月線之下 → 短線趨勢偏弱" in text
-        assert "台幣明顯走貶 → 外資資金偏匯出" in text
-        assert "法人連 1 日賣超 → 大戶偏保守" in text
-        assert "融資 5 日大增 → 散戶槓桿升溫" in text
-        assert "VIX 跳升 → 國際避險情緒升溫" in text
-        assert "僅陳列現況供判讀" in text
+        assert "【📖 白話解讀】" in content
+        assert "指數收在月線之下 → 短線趨勢偏弱" in content
+        assert "台幣明顯走貶 → 外資資金偏匯出" in content
+        assert "法人連 1 日賣超 → 大戶偏保守" in content
+        assert "融資 5 日大增 → 散戶槓桿升溫" in content
+        assert "VIX 跳升 → 國際避險情緒升溫" in content
+        assert "僅陳列現況供判讀" in content
+        # 走勢圖可實際取得
+        image_path = bubble["hero"]["url"].replace("http://testserver", "")
+        image = rt.client.get(image_path)
+        assert image.status_code == 200
+        assert image.content[:8] == b"\x89PNG\r\n\x1a\n"
 
 
 def test_daily_picks_push_includes_health():
@@ -699,7 +719,8 @@ def test_daily_picks_push_includes_health():
         rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "cron-secret"})
         push = rt.replies[-1]
         assert len(push["messages"]) == 2
-        assert "大盤體檢" in push["messages"][0]["text"]
+        assert push["messages"][0]["type"] == "flex"
+        assert "大盤體檢" in push["messages"][0]["altText"]
         assert push["messages"][1]["type"] == "flex"
 
 

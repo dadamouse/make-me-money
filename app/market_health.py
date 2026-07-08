@@ -2,6 +2,7 @@
 import logging
 from datetime import datetime, timedelta, timezone
 
+from .chart import render_index_png
 from .deps import Deps
 from .indicators import rsi
 from .parser import format_number, sign_of
@@ -133,3 +134,52 @@ async def build_market_health(deps: Deps) -> str:
         lines += notes
     lines.append("＊僅陳列現況供判讀，非投資建議")
     return "\n".join(lines)
+
+
+def _health_flex_lines(text: str) -> list[dict]:
+    """體檢文字 → flex body 元件（解讀區用淡色小字）。"""
+    components = []
+    in_notes = False
+    for line in text.split("\n")[1:]:  # 首行標題放 header
+        if not line:
+            continue
+        if line.startswith("【📖"):
+            in_notes = True
+        size = "xxs" if in_notes else "xs"
+        color = "#9E9E9E" if in_notes else "#333333"
+        weight = {"weight": "bold"} if line.startswith("【") else {}
+        components.append({"type": "text", "text": line, "size": size, "color": color, "wrap": True, **weight})
+    return components
+
+
+async def build_market_health_message(deps: Deps) -> dict:
+    """大盤體檢卡片：hero 放加權指數走勢圖，body 放數據與白話解讀。"""
+    text = await build_market_health(deps)
+    title = text.split("\n")[0]
+    bubble = {
+        "type": "bubble",
+        "size": "giga",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#37474F",
+            "paddingAll": "14px",
+            "contents": [{"type": "text", "text": title, "size": "md", "weight": "bold", "color": "#FFFFFF"}],
+        },
+        "body": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": _health_flex_lines(text)},
+    }
+    try:
+        series_desc = await deps.db.rpc("market_series", {"n": 60})
+        if len(series_desc) >= 5:
+            png = render_index_png(list(reversed(series_desc)))
+            chart_id = deps.charts.put(png)
+            bubble["hero"] = {
+                "type": "image",
+                "url": f"{deps.base_url}/charts/{chart_id}.png",
+                "size": "full",
+                "aspectRatio": "3:2",
+                "aspectMode": "fit",
+            }
+    except Exception:
+        logger.warning("大盤走勢圖繪製失敗，改純文字卡片", exc_info=True)
+    return {"type": "flex", "altText": text[:400], "contents": bubble}
