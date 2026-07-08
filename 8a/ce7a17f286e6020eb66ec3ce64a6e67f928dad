@@ -1,0 +1,19 @@
+supabase/cron.sql
+  s_d4fdd612f940f8::t_11054dd04e8cc1 142,150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8ace7a17f286e6020eb66ec3ce64a6e67f928dad",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
