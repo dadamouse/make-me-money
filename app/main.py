@@ -371,7 +371,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
                 await request.app.state.line.reply(event["replyToken"], reply_text)
                 handled += 1
             except httpx.HTTPError:
-                logger.exception("LINE 回覆失敗 cmd=%s", cmd)
+                logger.exception("LINE 回覆失敗 text=%s", text[:100])
         return {"ok": True, "handled": handled}
 
     return app
