@@ -1,7 +1,9 @@
 """指令處理：登入／切換／新增／刪除／清單／今日資訊／線圖。"""
 import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Awaitable, Callable
 from urllib.parse import quote
 
 from .chart import render_kline_png
@@ -27,6 +29,13 @@ _STOCK_COLUMNS = "select=stock_no,name,industry,market"
 _TAIPEI_TZ = timezone(timedelta(hours=8))
 _NEWS_SUBJECT_MAX = 120
 _MIN_CHART_ROWS = 5
+
+
+@dataclass
+class DeferredReply:
+    """需要時間運算的回覆：先送 ack_text，完成後用 push 送真正內容。"""
+    ack_text: str
+    builder: Callable[[], Awaitable[str | dict]]
 
 
 def _now_iso() -> str:
@@ -240,11 +249,14 @@ async def build_portfolio_entries(deps: Deps, member: dict) -> list[dict]:
     return entries
 
 
-async def _handle_list(deps: Deps, member: dict) -> str | dict:
-    entries = await build_portfolio_entries(deps, member)
-    if not entries:
-        return f"{member['name']} 目前沒有任何持股，輸入「新增2330」開始記錄。"
-    return build_portfolio_message(member["name"], entries, portfolio_url(deps, member))
+async def _handle_list(deps: Deps, member: dict) -> str | dict | DeferredReply:
+    async def build() -> str | dict:
+        entries = await build_portfolio_entries(deps, member)
+        if not entries:
+            return f"{member['name']} 目前沒有任何持股，輸入「新增2330」開始記錄。"
+        return build_portfolio_message(member["name"], entries, portfolio_url(deps, member))
+
+    return DeferredReply(ack_text="⏳ 載入持股中，請稍候…", builder=build)
 
 
 def stock_web_url(deps: Deps, stock_no: str) -> str:
@@ -274,50 +286,53 @@ async def _render_chart_reply(deps: Deps, stock: dict) -> str | dict:
 _CAROUSEL_MAX_BUBBLES = 10  # LINE carousel 上限 12，保守取 10（回覆時間也較穩）
 
 
-async def _handle_charts_all(deps: Deps, member: dict) -> str | dict:
+async def _handle_charts_all(deps: Deps, member: dict) -> str | dict | DeferredReply:
     rows = await deps.db.get(f"holdings?member_id=eq.{member['id']}&select=stock_no")
     if not rows:
         return f"{member['name']} 目前沒有任何持股，輸入「新增2330」開始記錄。"
-    codes = sorted({str(row["stock_no"]) for row in rows})
-    truncated = len(codes) > _CAROUSEL_MAX_BUBBLES
-    codes = codes[:_CAROUSEL_MAX_BUBBLES]
-    codes_query = ",".join(quote(code) for code in codes)
-    stock_rows = await deps.db.get(f"stocks?stock_no=in.({codes_query})&{_STOCK_COLUMNS}")
-    info_map = {s["stock_no"]: s for s in stock_rows}
 
-    bubbles = []
-    skipped = []
-    for code in codes:
-        stock = info_map.get(code, {"stock_no": code, "name": code, "market": None})
-        try:
-            history = await get_price_history(deps.db, deps.twse, code, stock.get("market"))
-            history = merge_realtime_bar(history, await deps.twse.fetch_realtime(code, stock.get("market")))
-            if len(history) < _MIN_CHART_ROWS:
-                skipped.append(code)
-                continue
-            png = render_kline_png(history, f"{code} {stock['name']}")
-            chart_id = deps.charts.put(png)
-            image_url = f"{deps.base_url}/charts/{chart_id}.png"
-            bubbles.append(
-                build_chart_bubble(
-                    stock, image_url, history[-1]["close"], compute_indicators(history),
-                    size="mega", page_url=stock_web_url(deps, code),
+    async def build() -> str | dict:
+        codes = sorted({str(row["stock_no"]) for row in rows})
+        truncated = len(codes) > _CAROUSEL_MAX_BUBBLES
+        codes_to_show = codes[:_CAROUSEL_MAX_BUBBLES]
+        codes_query = ",".join(quote(code) for code in codes_to_show)
+        stock_rows = await deps.db.get(f"stocks?stock_no=in.({codes_query})&{_STOCK_COLUMNS}")
+        info_map = {s["stock_no"]: s for s in stock_rows}
+        bubbles = []
+        skipped = []
+        for code in codes_to_show:
+            stock = info_map.get(code, {"stock_no": code, "name": code, "market": None})
+            try:
+                history = await get_price_history(deps.db, deps.twse, code, stock.get("market"))
+                history = merge_realtime_bar(history, await deps.twse.fetch_realtime(code, stock.get("market")))
+                if len(history) < _MIN_CHART_ROWS:
+                    skipped.append(code)
+                    continue
+                png = render_kline_png(history, f"{code} {stock['name']}")
+                chart_id = deps.charts.put(png)
+                image_url = f"{deps.base_url}/charts/{chart_id}.png"
+                bubbles.append(
+                    build_chart_bubble(
+                        stock, image_url, history[-1]["close"], compute_indicators(history),
+                        size="mega", page_url=stock_web_url(deps, code),
+                    )
                 )
-            )
-        except Exception:
-            logger.warning("持股線圖產生失敗 stock_no=%s", code, exc_info=True)
-            skipped.append(code)
-    if not bubbles:
-        return "❌ 目前持股都還畫不出線圖（歷史資料不足），過幾個交易日再試。"
-    message = build_chart_carousel_message(member["name"], bubbles)
-    if truncated or skipped:
-        notes = []
-        if truncated:
-            notes.append(f"僅顯示前 {_CAROUSEL_MAX_BUBBLES} 檔")
-        if skipped:
-            notes.append(f"資料不足略過：{'、'.join(skipped)}")
-        message["altText"] += f"（{'；'.join(notes)}）"
-    return message
+            except Exception:
+                logger.warning("持股線圖產生失敗 stock_no=%s", code, exc_info=True)
+                skipped.append(code)
+        if not bubbles:
+            return "❌ 目前持股都還畫不出線圖（歷史資料不足），過幾個交易日再試。"
+        message = build_chart_carousel_message(member["name"], bubbles)
+        if truncated or skipped:
+            notes = []
+            if truncated:
+                notes.append(f"僅顯示前 {_CAROUSEL_MAX_BUBBLES} 檔")
+            if skipped:
+                notes.append(f"資料不足略過：{'、'.join(skipped)}")
+            message["altText"] += f"（{'；'.join(notes)}）"
+        return message
+
+    return DeferredReply(ack_text="⏳ 載入線圖中，請稍候…", builder=build)
 
 
 async def _handle_chart(deps: Deps, line_user_id: str, cmd: Command) -> str | dict:

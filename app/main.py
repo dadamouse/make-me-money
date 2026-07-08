@@ -7,14 +7,14 @@ import re
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 
 from .chart import ChartStore, render_kline_png
 from .config import Settings, load_settings
 from .deps import Deps
 from .flex import build_picks_message
-from .handlers import build_portfolio_entries, handle_text, picks_web_url
+from .handlers import DeferredReply, build_portfolio_entries, handle_text, picks_web_url
 from .indicators import compute_indicators
 from .broker_flows import broker_flow_text, sync_broker_flows
 from .history import get_price_history
@@ -349,7 +349,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         return {"ok": True, "stocks_synced": stocks_synced, **result}
 
     @app.post("/webhook/line")
-    async def line_webhook(request: Request) -> dict:
+    async def line_webhook(request: Request, background_tasks: BackgroundTasks) -> dict:
         body = await request.body()
         signature = request.headers.get("x-line-signature")
         if not verify_signature(request.app.state.settings.line_channel_secret, body, signature):
@@ -363,15 +363,33 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             line_user_id = (event.get("source") or {}).get("userId")
             text = event["message"]["text"]
             try:
-                reply_text = await handle_text(request.app.state.deps, line_user_id, text)
+                result = await handle_text(request.app.state.deps, line_user_id, text)
             except Exception as error:
                 logger.exception("指令處理失敗 text=%s", text[:100])
-                reply_text = f"⚠️ 系統錯誤：{error}"
-            try:
-                await request.app.state.line.reply(event["replyToken"], reply_text)
-                handled += 1
-            except httpx.HTTPError:
-                logger.exception("LINE 回覆失敗 text=%s", text[:100])
+                result = f"⚠️ 系統錯誤：{error}"
+
+            if isinstance(result, DeferredReply):
+                # 先立刻回覆 ack，完成後用 push 送真正內容（避免 replyToken 30 秒過期）
+                try:
+                    await request.app.state.line.reply(event["replyToken"], result.ack_text)
+                    handled += 1
+                except httpx.HTTPError:
+                    logger.exception("LINE ack 回覆失敗 text=%s", text[:100])
+
+                async def _push_deferred(uid: str, deferred: DeferredReply) -> None:
+                    try:
+                        content = await deferred.builder()
+                        await request.app.state.line.push(uid, content)
+                    except Exception:
+                        logger.exception("DeferredReply push 失敗 user=%s", uid)
+
+                background_tasks.add_task(_push_deferred, line_user_id, result)
+            else:
+                try:
+                    await request.app.state.line.reply(event["replyToken"], result)
+                    handled += 1
+                except httpx.HTTPError:
+                    logger.exception("LINE 回覆失敗 text=%s", text[:100])
         return {"ok": True, "handled": handled}
 
     return app
