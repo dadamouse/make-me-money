@@ -15,6 +15,7 @@ from .flex import (
     build_picks_message,
     build_portfolio_message,
 )
+from .health import build_health_report
 from .history import get_price_history, merge_realtime_bar, read_batch
 from .indicators import compute_indicators
 from .market_health import build_market_health_message
@@ -280,6 +281,7 @@ async def _render_chart_reply(deps: Deps, stock: dict) -> str | dict:
         history[-1]["close"],
         indicators,
         page_url=stock_web_url(deps, stock["stock_no"]),
+        extra_line=build_health_report(history),
     )
 
 

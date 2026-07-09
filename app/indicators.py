@@ -92,6 +92,59 @@ def kd_series(rows: list[dict], period: int = KD_PERIOD) -> tuple[list, list, li
     return k_out, d_out, j_out
 
 
+def ema_series(values: list[float], period: int) -> list[float | None]:
+    """EMA 序列：前 period-1 筆為 None，第 period 筆用 SMA 起算。"""
+    n = len(values)
+    out: list[float | None] = [None] * n
+    if n < period:
+        return out
+    ema = sum(values[:period]) / period
+    out[period - 1] = ema
+    multiplier = 2 / (period + 1)
+    for i in range(period, n):
+        ema = (values[i] - ema) * multiplier + ema
+        out[i] = ema
+    return out
+
+
+def macd_series(closes: list[float], fast: int = 12, slow: int = 26, signal: int = 9) -> tuple[list, list, list]:
+    """回傳 (DIF, 訊號線, 柱狀圖) 序列，資料不足處為 None。"""
+    n = len(closes)
+    ema_fast = ema_series(closes, fast)
+    ema_slow = ema_series(closes, slow)
+    dif: list[float | None] = [
+        f - s if f is not None and s is not None else None for f, s in zip(ema_fast, ema_slow)
+    ]
+    dif_values = [v for v in dif if v is not None]
+    signal_tail = ema_series(dif_values, signal)
+    signal_out: list[float | None] = [None] * n
+    offset = n - len(dif_values)
+    for i, value in enumerate(signal_tail):
+        signal_out[offset + i] = value
+    hist: list[float | None] = [
+        d - s if d is not None and s is not None else None for d, s in zip(dif, signal_out)
+    ]
+    return dif, signal_out, hist
+
+
+def obv_series(rows: list[dict]) -> list[float | None]:
+    """OBV 序列：收漲加量、收跌減量；缺量能的日子沿用前值。"""
+    out: list[float | None] = []
+    obv = 0.0
+    prev_close = None
+    for row in rows:
+        close, volume = row.get("close"), row.get("volume")
+        if close is not None and volume is not None and prev_close is not None:
+            if close > prev_close:
+                obv += volume
+            elif close < prev_close:
+                obv -= volume
+        if close is not None:
+            prev_close = close
+        out.append(obv)
+    return out
+
+
 def compute_indicators(rows: list[dict]) -> dict:
     closes = [r["close"] for r in rows if r.get("close") is not None]
     k, d = stochastic_kd(rows)

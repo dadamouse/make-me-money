@@ -233,7 +233,11 @@ def build_chart_bubble(
     if close is not None:
         body_rows += _indicator_rows({"indicators": indicators}, close)
     if extra_line:
-        body_rows.append(_text(extra_line, size="xxs", color=MUTED_COLOR, wrap=True))
+        lines = extra_line.splitlines()
+        body_rows.append({"type": "separator", "margin": "md"})
+        body_rows.append(_text(lines[0], size="xs", weight="bold", color=TITLE_COLOR, margin="md"))
+        for line in lines[1:]:
+            body_rows.append(_text(line, size="xs", color=VALUE_COLOR, wrap=True))
     bubble = {
         "type": "bubble",
         "size": size,
