@@ -1,0 +1,23 @@
+app/handlers.py
+  s_7e7fe61c7f8490::t_25471321301b79 30
+  s_7e7fe61c7f8490::t_6fca1613effde0 113-123,125-130
+tests/test_bot.py
+  s_7e7fe61c7f8490::t_49c45dc8b63f07 222-227
+  s_7e7fe61c7f8490::t_50640d84ac97fe 520-531
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7cb65bdfb067dcd884630967b5a031e1163967ac",
+  "prompts": {},
+  "sessions": {
+    "s_7e7fe61c7f8490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59fc179f-d8b1-4c7e-9d5c-32a2b7e046cc",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
