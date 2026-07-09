@@ -1,0 +1,28 @@
+app/indicators.py
+  s_d4fdd612f940f8::t_bf913f36d39d42 95-147
+tests/test_health.py
+  s_d4fdd612f940f8::t_b4f779433428b0 1-76
+app/health.py
+  s_d4fdd612f940f8::t_0600139a577b13 1-128
+app/handlers.py
+  s_d4fdd612f940f8::t_3b9873c061d6f6 18
+  s_d4fdd612f940f8::t_1e6a18d6ae01b0 284
+app/flex.py
+  s_d4fdd612f940f8::t_8fcc749fd85cb8 236-240
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "57e79c199dd59097c3454dae7a41a437b2dd2d32",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
