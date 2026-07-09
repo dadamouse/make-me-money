@@ -38,7 +38,7 @@ def test_downtrend_fires_s1_s3_s5_and_no_long():
     assert sell["S3"]["on"] is True
     assert sell["S5"]["on"] is True
     assert result["no_long"] is True
-    assert "S1、S3、S5" in signal_summary_line(result)
+    assert "跌破5日線、跌破10日線＋死叉、跌破20日線（反彈無力）" in signal_summary_line(result)
 
 
 def test_breakout_b2_market_split():

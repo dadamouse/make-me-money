@@ -109,7 +109,7 @@ def evaluate_signals(rows: list[dict], market: str | None) -> dict | None:
     # B1 積極：站上5日線且5日線上揚
     b1 = ma5 is not None and ma5_prev is not None and close > ma5 and ma5 > ma5_prev
     buy.append({
-        "code": "B1", "on": b1,
+        "code": "B1", "label": "站上5日線（積極買點）", "on": b1,
         "text": f"站上5日線 {format_number(ma5)} 且上揚" if b1
         else f"未站上5日線 {format_number(ma5)} 或5日線未上揚",
     })
@@ -121,12 +121,12 @@ def evaluate_signals(rows: list[dict], market: str | None) -> dict | None:
         if vol_ratio is not None
         else "量能資料不足"
     )
-    buy.append({"code": "B2", "on": b2, "text": f"突破盤整區（{b2_facts}）" if b2 else b2_facts})
+    buy.append({"code": "B2", "label": "帶量突破盤整（保守買點）", "on": b2, "text": f"突破盤整區（{b2_facts}）" if b2 else b2_facts})
     # B3 加碼：今日突破且前20日內已有一次突破（二次突破）
     prior_breakout = any(_is_breakout(rows, i) for i in range(len(rows) - _BREAKOUT_WINDOW, len(rows) - 1))
     b3 = breakout_today and prior_breakout
     buy.append({
-        "code": "B3", "on": b3,
+        "code": "B3", "label": "二次突破（加碼點）", "on": b3,
         "text": "整理後二次突破" if b3 else "無二次突破",
     })
 
@@ -134,7 +134,7 @@ def evaluate_signals(rows: list[dict], market: str | None) -> dict | None:
     # S1：跌破5日線且5日線下彎
     s1 = ma5 is not None and ma5_prev is not None and close < ma5 and ma5 < ma5_prev
     sell.append({
-        "code": "S1", "on": s1,
+        "code": "S1", "label": "跌破5日線", "on": s1,
         "text": f"跌破5日線 {format_number(ma5)} 且下彎" if s1 else f"5日線 {format_number(ma5)} 未跌破",
     })
     # S2：向下跳空缺口 或 中長黑
@@ -147,14 +147,14 @@ def evaluate_signals(rows: list[dict], market: str | None) -> dict | None:
         s2_parts.append("向下跳空缺口")
     if long_black and body is not None and avg_body:
         s2_parts.append(f"中長黑（實體 {body:.1f}%＝平均 {avg_body:.1f}% 的 {abs(body) / avg_body:.1f} 倍）")
-    sell.append({"code": "S2", "on": s2, "text": "、".join(s2_parts) if s2 else "無跳空缺口或中長黑"})
+    sell.append({"code": "S2", "label": "跳空缺口/中長黑", "on": s2, "text": "、".join(s2_parts) if s2 else "無跳空缺口或中長黑"})
     # S3：跌破10日線下彎＋5/10日線死叉
     s3 = (
         all(v is not None for v in (ma10, ma10_prev, ma5))
         and close < ma10 and ma10 < ma10_prev and ma5 < ma10
     )
     sell.append({
-        "code": "S3", "on": s3,
+        "code": "S3", "label": "跌破10日線＋死叉", "on": s3,
         "text": f"跌破10日線 {format_number(ma10)} 下彎＋5/10死叉" if s3 else f"10日線 {format_number(ma10)} 未跌破或無死叉",
     })
     # S4：跌破最近一次「突破盤整區的中長紅K」中間值
@@ -176,7 +176,7 @@ def evaluate_signals(rows: list[dict], market: str | None) -> dict | None:
             else f"守住突破紅K（{date}）中間值 {format_number(mid)}"
         )
         break
-    sell.append({"code": "S4", "on": s4, "text": s4_text})
+    sell.append({"code": "S4", "label": "跌破突破紅K中間值", "on": s4, "text": s4_text})
     # S5：近5日收盤都在10日線下（反彈不過）＋跌破20日線且下彎
     s5 = (
         all(v is not None for v in (ma10, ma20, ma20_prev))
@@ -184,7 +184,7 @@ def evaluate_signals(rows: list[dict], market: str | None) -> dict | None:
         and close < ma20 and ma20 < ma20_prev
     )
     sell.append({
-        "code": "S5", "on": s5,
+        "code": "S5", "label": "跌破20日線（反彈無力）", "on": s5,
         "text": f"反彈不過10日線＋跌破20日線 {format_number(ma20)} 下彎" if s5 else "未同時符合（反彈不過10日線＋破下彎20日線）",
     })
 
@@ -208,10 +208,10 @@ def format_signal_report(stock: dict, close: float, trade_date: str, result: dic
         "📈 買進訊號",
     ]
     for item in result["buy"]:
-        lines.append(f"{item['code']} {'✅' if item['on'] else '－'} {item['text']}")
+        lines.append(f"{'✅' if item['on'] else '－'} {item['label']}：{item['text']}")
     lines += ["", "📉 賣出訊號"]
     for item in result["sell"]:
-        lines.append(f"{item['code']} {'🚨' if item['on'] else '－'} {item['text']}")
+        lines.append(f"{'🚨' if item['on'] else '－'} {item['label']}：{item['text']}")
     if result["no_long"]:
         lines += ["", "⛔ 20日線下彎：此股不做多（持有者出現賣訊即減碼）"]
     lines += ["", f"（{result['params_note']}）"]
@@ -222,7 +222,7 @@ def signal_summary_line(result: dict | None) -> str | None:
     """圖卡摘要行：賣出訊號 n/5。"""
     if not result:
         return None
-    fired = [item["code"] for item in result["sell"] if item["on"]]
+    fired = [item["label"] for item in result["sell"] if item["on"]]
     if fired:
         return f"🚨 支撐跌破：賣出訊號 {len(fired)}/5（{'、'.join(fired)}）"
     return "🟢 支撐跌破：無賣出訊號（0/5）"
