@@ -219,6 +219,12 @@ class FakePostgrest:
             elif value.startswith("like.") and value.endswith("*"):
                 prefix = value[5:-1]
                 filters.append(lambda row, k=key, p=prefix: str(row.get(k, "")).startswith(p))
+            elif value.startswith("ilike.") and value.endswith("*"):
+                prefix = value[6:-1].lower()
+                filters.append(lambda row, k=key, p=prefix: str(row.get(k, "")).lower().startswith(p))
+            elif value.startswith("ilike."):
+                exact = value[6:].lower()
+                filters.append(lambda row, k=key, v=exact: str(row.get(k, "")).lower() == v)
             elif value.startswith("gte."):
                 filters.append(lambda row, k=key, v=value[4:]: str(row.get(k, "")) >= v)
         match = lambda row: all(f(row) for f in filters)  # noqa: E731
@@ -509,6 +515,18 @@ def test_name_prefix_matches_starred_stock():
         rt.send("新增國巨")
         assert "已為 dada 新增 國巨*（2327・上市）" in rt.last_reply()
         assert rt.postgrest.db["holdings"][-1]["stock_no"] == "2327"
+
+
+def test_ky_stock_name_variants_all_match():
+    """KY 股輸入變體：「捷敏-ky」（小寫）、「捷敏」（省略後綴）、「捷敏ky」（少連字號）都要找到「捷敏-KY」。"""
+    for user_input in ("捷敏-ky", "捷敏", "捷敏ky"):
+        with BotRuntime() as rt:
+            rt.postgrest.db["stocks"].append(
+                {"stock_no": "6525", "name": "捷敏-KY", "industry": "半導體", "market": "上市"}
+            )
+            rt.send("登入dada")
+            rt.send(f"新增{user_input}")
+            assert "已為 dada 新增 捷敏-KY（6525・上市）" in rt.last_reply(), f"輸入「{user_input}」應找到捷敏-KY"
 
 
 def test_name_prefix_multiple_matches_offers_pick():

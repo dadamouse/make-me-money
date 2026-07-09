@@ -27,6 +27,7 @@ from .webview import picks_sig, portfolio_sig, stock_sig
 logger = logging.getLogger(__name__)
 
 _STOCK_NO_PATTERN = re.compile(r"\d{4,6}[A-Z]?")
+_KY_SUFFIX_PATTERN = re.compile(r"(.+?)-?[Kk][Yy]")
 _STOCK_COLUMNS = "select=stock_no,name,industry,market"
 _TAIPEI_TZ = timezone(timedelta(hours=8))
 _NEWS_SUBJECT_MAX = 120
@@ -109,15 +110,24 @@ async def _resolve_stock(deps: Deps, user_input: str) -> dict | None:
             return {"candidates": candidates}
         # 查不到仍允許新增（可能是極新掛牌），名稱先以代號代替
         return {"stock_no": user_input, "name": user_input, "market": None, "unknown": True}
-    rows = await deps.db.get(f"stocks?name=eq.{quote(user_input)}&{_STOCK_COLUMNS}")
-    if rows:
-        return rows[0]
+    # 名稱查詢用 ilike 忽略英文大小寫：「捷敏-ky」可對到「捷敏-KY」
+    query_names = [user_input]
+    ky_match = _KY_SUFFIX_PATTERN.fullmatch(user_input)
+    if ky_match:
+        normalized = f"{ky_match.group(1)}-KY"  # 「捷敏ky」補連字號 → 「捷敏-KY」
+        if normalized != user_input:
+            query_names.append(normalized)
+    for name in query_names:
+        rows = await deps.db.get(f"stocks?name=ilike.{quote(name)}&{_STOCK_COLUMNS}")
+        if rows:
+            return rows[0]
     # 完全比對失敗改前綴查詢：如「國巨」→「國巨*」（減資/分割後名稱帶星號）
-    candidates = await deps.db.get(f"stocks?name=like.{quote(user_input)}*&{_STOCK_COLUMNS}&order=stock_no&limit=6")
-    if len(candidates) == 1:
-        return candidates[0]
-    if candidates:
-        return {"candidates": candidates}
+    for name in query_names:
+        candidates = await deps.db.get(f"stocks?name=ilike.{quote(name)}*&{_STOCK_COLUMNS}&order=stock_no&limit=6")
+        if len(candidates) == 1:
+            return candidates[0]
+        if candidates:
+            return {"candidates": candidates}
     return None
 
 
