@@ -79,6 +79,22 @@ async def fetch_quote(http: httpx.AsyncClient, symbol: str) -> dict | None:
         return None
 
 
+async def fetch_close_series(http: httpx.AsyncClient, symbol: str, range_: str = "3mo") -> list[float]:
+    """Yahoo v8 chart 日收盤序列（由舊到新，已濾 None）；失敗回空列表。"""
+    try:
+        response = await http.get(
+            _YAHOO_CHART_URL.format(symbol=symbol),
+            params={"range": range_, "interval": "1d"},
+            headers=_YAHOO_HEADERS,
+        )
+        response.raise_for_status()
+        result = response.json()["chart"]["result"][0]
+        return [c for c in result["indicators"]["quote"][0]["close"] if c is not None]
+    except Exception:
+        logger.warning("Yahoo 序列失敗 symbol=%s", symbol, exc_info=True)
+        return []
+
+
 _UP_ARROW = "🔺"   # 紅＝漲（台股慣例）
 _DOWN_ARROW = "🔽"  # 藍＝跌（Unicode 沒有綠色下三角，取對比色）
 

@@ -6,7 +6,7 @@ from .chart import render_index_png
 from .deps import Deps
 from .indicators import rsi
 from .parser import format_number, sign_of
-from .premarket import USDTWD_SYMBOL, fetch_quote
+from .premarket import USDTWD_SYMBOL, fetch_close_series, fetch_quote
 
 logger = logging.getLogger(__name__)
 
@@ -77,14 +77,35 @@ async def build_market_health(deps: Deps) -> str:
         lines.append("📋 大盤體檢")
         lines.append("指數資料累積中")
 
-    fx = await fetch_quote(deps.http, USDTWD_SYMBOL)
-    if fx:
-        direction = "台幣貶" if fx["pct"] >= 0 else "台幣升"
-        lines.append(f"匯率：美元/台幣 {fx['price']:.2f}（{sign_of(fx['pct'])}{fx['pct']:.2f}%，{direction}）")
-        if fx["pct"] >= 0.3:
-            notes.append("・台幣明顯走貶 → 外資資金偏匯出，對台股是逆風")
-        elif fx["pct"] <= -0.3:
-            notes.append("・台幣明顯走升 → 外資資金偏流入，對台股是助力")
+    # 台幣趨勢：外資資金流向的即時代理指標（USDTWD 升＝台幣貶＝資金偏流出）
+    fx_series = await fetch_close_series(deps.http, USDTWD_SYMBOL)
+    if len(fx_series) >= 21:
+        latest = fx_series[-1]
+        day_pct = (latest - fx_series[-2]) / fx_series[-2] * 100
+        five_pct = (latest - fx_series[-6]) / fx_series[-6] * 100
+        ma20 = sum(fx_series[-20:]) / 20
+        ma_bias = (latest - ma20) / ma20 * 100
+        trend = "貶值趨勢" if ma_bias > 0 else "升值趨勢"
+        lines.append(
+            f"匯率：美元/台幣 {latest:.2f}（今日 {sign_of(day_pct)}{day_pct:.2f}%｜5日 {sign_of(five_pct)}{five_pct:.2f}%）"
+        )
+        lines.append(f"台幣趨勢：月線{'上' if ma_bias > 0 else '下'}方 {abs(ma_bias):.1f}%（{trend}）")
+        window = fx_series[-60:]
+        if latest >= max(window):
+            notes.append("・台幣貶破近 3 個月低點 → 外資匯出訊號強，權值股賣壓要留意")
+        elif latest <= min(window):
+            notes.append("・台幣升破近 3 個月高點 → 外資大幅匯入，權值股較有支撐")
+        elif five_pct >= 0.5:
+            notes.append("・台幣近 5 日明顯走貶 → 外資資金偏匯出，對台股是逆風")
+        elif five_pct <= -0.5:
+            notes.append("・台幣近 5 日明顯走升 → 外資資金偏流入，對台股是助力")
+        else:
+            notes.append(f"・台幣處{trend}（vs 月線）→ 中期資金流向偏{'出' if ma_bias > 0 else '入'}，短線持平")
+    else:
+        fx = await fetch_quote(deps.http, USDTWD_SYMBOL)
+        if fx:
+            direction = "台幣貶" if fx["pct"] >= 0 else "台幣升"
+            lines.append(f"匯率：美元/台幣 {fx['price']:.2f}（{sign_of(fx['pct'])}{fx['pct']:.2f}%，{direction}）")
 
     flows = await deps.db.rpc("market_flow_series", {"n": 10})
     insti_values = [float(row["insti_net"]) for row in flows if row.get("insti_net") is not None]

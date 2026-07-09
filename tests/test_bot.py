@@ -114,7 +114,8 @@ YAHOO_FIXTURES = {
     "^N225": [69737.69, 68256.96],
     "^KS11": [8051.33, 7656.31],
     "TSM": [434.16, 451.79],
-    "USDTWD=X": [31.9, 32.0],
+    # 60 點序列：日 +0.31%、5日 +1.59%、月線上方 1.4%、收在近 3 月最高（貶值極端）
+    "USDTWD=X": [31.5] * 57 + [31.6, 31.9, 32.0],
 }
 
 def _market_series_fixture():
@@ -756,7 +757,8 @@ def test_market_health_command():
         assert "位置：月線下方 1.1%" in content
         assert "量能：5 日均量的 1.05 倍" in content
         assert "大盤 RSI14：" in content
-        assert "匯率：美元/台幣 32.00（+0.31%，台幣貶）" in content
+        assert "匯率：美元/台幣 32.00（今日 +0.31%｜5日 +1.59%）" in content
+        assert "台幣趨勢：月線上方 1.4%（貶值趨勢）" in content
         assert "法人：今日 -242,259 張（連 1 日賣超）" in content
         assert "融資：-42,283 張｜5 日累計 +175,355 張（資料日 07/06）" in content
         assert "寬度：漲 1,177 家／跌 965 家｜創20日新高 339／新低 55" in content
@@ -764,7 +766,7 @@ def test_market_health_command():
         # 白話解讀（描述現況、不做預測）
         assert "【📖 白話解讀】" in content
         assert "指數收在月線之下 → 短線趨勢偏弱" in content
-        assert "台幣明顯走貶 → 外資資金偏匯出" in content
+        assert "台幣貶破近 3 個月低點 → 外資匯出訊號強" in content
         assert "法人連 1 日賣超 → 大戶偏保守" in content
         assert "融資 5 日大增 → 散戶槓桿升溫" in content
         assert "VIX 跳升 → 國際避險情緒升溫" in content
