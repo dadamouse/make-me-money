@@ -109,7 +109,15 @@ async def _resolve_stock(deps: Deps, user_input: str) -> dict | None:
         # 查不到仍允許新增（可能是極新掛牌），名稱先以代號代替
         return {"stock_no": user_input, "name": user_input, "market": None, "unknown": True}
     rows = await deps.db.get(f"stocks?name=eq.{quote(user_input)}&{_STOCK_COLUMNS}")
-    return rows[0] if rows else None
+    if rows:
+        return rows[0]
+    # 完全比對失敗改前綴查詢：如「國巨」→「國巨*」（減資/分割後名稱帶星號）
+    candidates = await deps.db.get(f"stocks?name=like.{quote(user_input)}*&{_STOCK_COLUMNS}&order=stock_no&limit=6")
+    if len(candidates) == 1:
+        return candidates[0]
+    if candidates:
+        return {"candidates": candidates}
+    return None
 
 
 def _candidates_reply(user_input: str, candidates: list[dict]) -> str:

@@ -500,6 +500,28 @@ def test_code_suffix_autocompleted_when_unique():
         assert "已為 dada 新增 元大台灣50正2（00631L・上市）" in rt.last_reply()
 
 
+def test_name_prefix_matches_starred_stock():
+    """減資/分割後名稱帶星號（如「國巨*」），輸入不帶星號也要找得到。"""
+    with BotRuntime() as rt:
+        rt.postgrest.db["stocks"].append({"stock_no": "2327", "name": "國巨*", "industry": "電子零組件", "market": "上市"})
+        rt.send("登入dada")
+        rt.send("新增國巨")
+        assert "已為 dada 新增 國巨*（2327・上市）" in rt.last_reply()
+        assert rt.postgrest.db["holdings"][-1]["stock_no"] == "2327"
+
+
+def test_name_prefix_multiple_matches_offers_pick():
+    with BotRuntime() as rt:
+        rt.postgrest.db["stocks"].append({"stock_no": "2327", "name": "國巨*", "industry": "電子零組件", "market": "上市"})
+        rt.postgrest.db["stocks"].append({"stock_no": "9999", "name": "國巨測試", "industry": "其他", "market": "上櫃"})
+        rt.send("登入dada")
+        rt.send("新增國巨")
+        reply = rt.last_reply()
+        assert "有多個符合，請回覆數字選擇" in reply
+        rt.send("1")
+        assert "已為 dada 新增 國巨*（2327・上市）" in rt.last_reply()
+
+
 def test_ambiguous_code_offers_numbered_pick():
     with BotRuntime() as rt:
         rt.send("登入dada")
