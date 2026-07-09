@@ -1,0 +1,23 @@
+app/support_break.py
+  s_d4fdd612f940f8::t_31c10f25507852 225
+  s_d4fdd612f940f8::t_c0053902e9025d 112,124,129,137,150,157,179,187
+  s_d4fdd612f940f8::t_11e897dd52b595 211,214
+tests/test_support_break.py
+  s_d4fdd612f940f8::t_442ae251c37787 41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "70e490831e3d276a1da64ac75747e89ab779440c",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
