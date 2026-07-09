@@ -1,0 +1,26 @@
+app/premarket.py
+  s_d4fdd612f940f8::t_b06b7ff0a5f727 82-97
+app/market_health.py
+  s_d4fdd612f940f8::t_34da0e90977462 80-108
+  s_d4fdd612f940f8::t_9e1c02bfc24258 9
+tests/test_bot.py
+  s_d4fdd612f940f8::t_1b3fd71e45be25 769
+  s_d4fdd612f940f8::t_8032746aa04e9d 760-761
+  s_d4fdd612f940f8::t_94ce1552190ece 117-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "069e8b149604c7e03454ee9db55af467f804694b",
+  "prompts": {},
+  "sessions": {
+    "s_d4fdd612f940f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6c74475a-58b2-4082-b241-8ce962248c02",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
