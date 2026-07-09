@@ -21,6 +21,7 @@ HELP_TEXT = "\n".join(
         "▸ 刪除2330",
         "▸ 清空持股（需再回覆「確認」）",
         "▸ 圖2330（技術分析圖）",
+        "▸ 訊號2330（支撐跌破法買賣訊號）",
         "",
         "💡 小技巧",
         "・多行指令可一次貼上，會逐行執行",
@@ -71,6 +72,8 @@ def parse_command(raw_text: str | None) -> Command:
         return Command(action="charts_all")
     if m := re.fullmatch(r"(?:線圖|[Kk]線|圖)\s*(\S+)", text):
         return Command(action="chart", stock=m.group(1))
+    if m := re.fullmatch(r"(?:訊號|信號)\s*(\S+)", text):
+        return Command(action="signal", stock=m.group(1))
     if re.fullmatch(r"量增排行|量增", text):
         return Command(action="volume_rank")
     if re.fullmatch(r"每日選股|選股", text):

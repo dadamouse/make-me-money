@@ -21,6 +21,7 @@ from .indicators import compute_indicators
 from .market_health import build_market_health_message
 from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number, parse_command
 from .screener import format_picks_message, run_daily_picks
+from .support_break import evaluate_signals, format_signal_report, signal_summary_line
 from .webview import picks_sig, portfolio_sig, stock_sig
 
 logger = logging.getLogger(__name__)
@@ -190,6 +191,8 @@ async def _apply_pick(deps: Deps, line_user_id: str, member: dict, cmd: Command,
         return await _insert_holding(deps, member, stock, pending_item.get("shares"), pending_item.get("cost"))
     if pending_item["action"] == "chart":
         return await _render_chart_reply(deps, stock)
+    if pending_item["action"] == "signal":
+        return await _render_signal_reply(deps, stock)
     return await _delete_holding(deps, member, stock, stock["stock_no"])
 
 
@@ -282,6 +285,10 @@ async def _render_chart_reply(deps: Deps, stock: dict) -> str | dict:
     chart_id = deps.charts.put(png)
     image_url = f"{deps.base_url}/charts/{chart_id}.png"
     indicators = compute_indicators(history)
+    extra = build_health_report(history)
+    summary = signal_summary_line(evaluate_signals(history, stock.get("market")))
+    if summary:
+        extra = f"{extra}\n{summary}" if extra else summary
     # 集保大戶比為週頻資料，僅於週六週報與個股網頁呈現，不放每日卡片
     return build_chart_message(
         stock,
@@ -289,7 +296,7 @@ async def _render_chart_reply(deps: Deps, stock: dict) -> str | dict:
         history[-1]["close"],
         indicators,
         page_url=stock_web_url(deps, stock["stock_no"]),
-        extra_line=build_health_report(history),
+        extra_line=extra,
     )
 
 
@@ -353,6 +360,25 @@ async def _handle_chart(deps: Deps, line_user_id: str, cmd: Command) -> str | di
         deps.pending.put(line_user_id, {"action": "chart", "candidates": stock["candidates"]})
         return _candidates_reply(cmd.stock, stock["candidates"])
     return await _render_chart_reply(deps, stock)
+
+
+async def _render_signal_reply(deps: Deps, stock: dict) -> str:
+    history = await get_price_history(deps.db, deps.twse, stock["stock_no"], stock.get("market"))
+    history = merge_realtime_bar(history, await deps.twse.fetch_realtime(stock["stock_no"], stock.get("market")))
+    result = evaluate_signals(history, stock.get("market"))
+    if not result:
+        return f"❌ {_stock_label(stock)} 歷史資料不足（需至少 26 個交易日），暫時算不出訊號。"
+    return format_signal_report(stock, history[-1]["close"], str(history[-1]["trade_date"]), result)
+
+
+async def _handle_signal(deps: Deps, line_user_id: str, cmd: Command) -> str:
+    stock = await _resolve_stock(deps, cmd.stock)
+    if not stock:
+        return f"❌ 找不到「{cmd.stock}」。請確認名稱（公司簡稱），或直接輸入代號，例如：訊號2330"
+    if stock.get("candidates"):
+        deps.pending.put(line_user_id, {"action": "signal", "candidates": stock["candidates"]})
+        return _candidates_reply(cmd.stock, stock["candidates"])
+    return await _render_signal_reply(deps, stock)
 
 
 _VOLUME_RANK_MIN_SHARES = 1_000_000  # 過濾冷門股：今日至少 1,000 張
@@ -511,6 +537,8 @@ async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> 
         return await _handle_news(deps, member)
     if cmd.action == "chart":
         return await _handle_chart(deps, line_user_id, cmd)
+    if cmd.action == "signal":
+        return await _handle_signal(deps, line_user_id, cmd)
     if cmd.action == "charts_all":
         return await _handle_charts_all(deps, member)
     if cmd.action == "clear":
