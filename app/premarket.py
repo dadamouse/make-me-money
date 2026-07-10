@@ -208,22 +208,23 @@ async def _yesterday_taiwan_summary(deps: Deps) -> list[str]:
     return lines
 
 
-async def build_open_brief(deps: Deps) -> str:
+async def build_open_brief(deps: Deps) -> str | None:
+    """8:30 開盤前導航；平日試撮時段應有模擬撮合價，完全沒有＝臨時休市（颱風）或 MIS 異常，回 None 跳過推播。"""
     now = datetime.now(_TAIPEI_TZ)
-    lines = [f"📣 開盤前導航（{now.strftime('%m/%d %H:%M')}）", ""]
 
     # 注：曾有「ADR 隱含開盤價」換算，因 TSM ADR 存在 15-25% 常態溢價，
     # 絕對換算值無預測意義而移除；方向參考用 8:05 的 ADR 漲跌%＋此處的試撮實價。
     trial = await fetch_trial_quotes(deps.http)
-    lines.append("【台股試撮（8:30-9:00 模擬撮合）】")
     trial_index = trial.get("t00")
     index_line = _trial_line("加權指數", trial_index)
     tsmc_line = _trial_line("台積電", trial.get("2330"))
-    if index_line or tsmc_line:
-        lines += [line for line in (index_line, tsmc_line) if line]
-        lines.append("＊8:55 前試撮可掛假單，價格僅供參考")
-    else:
-        lines.append("目前非試撮時段，暫無資料")
+    if not index_line and not tsmc_line:
+        return None
+
+    lines = [f"📣 開盤前導航（{now.strftime('%m/%d %H:%M')}）", ""]
+    lines.append("【台股試撮（8:30-9:00 模擬撮合）】")
+    lines += [line for line in (index_line, tsmc_line) if line]
+    lines.append("＊8:55 前試撮可掛假單，價格僅供參考")
 
     yesterday = await _yesterday_taiwan_summary(deps)
     if yesterday:

@@ -55,3 +55,33 @@ def test_morning_open_push_with_adr_implied():
         assert "試撮指數 -2.3% → 開盤預告重挫" in text
         assert "昨日法人合計賣超 → 大戶偏保守" in text
         assert "融資減少 → 散戶槓桿退場中" in text
+
+
+# conftest 固定「今天」為 2026-07-10（民國 1150710 週五）
+_HOLIDAY_TODAY = [{"Name": "測試假日", "Date": "1150710", "Weekday": "五", "Description": ""}]
+
+
+def test_morning_pushes_skipped_on_scheduled_holiday():
+    """國定休市日（TWSE 休市日曆）：早上兩則都不推播。"""
+    with BotRuntime(holiday_fixture=_HOLIDAY_TODAY) as rt:
+        rt.send("登入dada")
+        pushes_before = len(rt.replies)
+        for endpoint in ("/admin/morning-macro", "/admin/morning-open"):
+            response = rt.client.post(endpoint, headers={"x-cron-secret": "cron-secret"})
+            assert response.status_code == 200
+            assert response.json() == {"ok": True, "pushed": 0, "skipped": "market closed"}
+        assert len(rt.replies) == pushes_before
+
+
+def test_morning_open_skipped_without_trial_data():
+    """颱風臨時休市不在休市日曆內：8:30 平日應有試撮價，完全沒有就跳過開盤導航。"""
+    with BotRuntime(mis_fixtures={}) as rt:
+        rt.send("登入dada")
+        pushes_before = len(rt.replies)
+        response = rt.client.post("/admin/morning-open", headers={"x-cron-secret": "cron-secret"})
+        assert response.status_code == 200
+        assert response.json() == {"ok": True, "pushed": 0, "skipped": "no trial data"}
+        assert len(rt.replies) == pushes_before
+        # 總經快報以國外資料為主，颱風天 8:00 無可靠休市訊號，仍照常發（已知限制）
+        response = rt.client.post("/admin/morning-macro", headers={"x-cron-secret": "cron-secret"})
+        assert response.json()["pushed"] == 1

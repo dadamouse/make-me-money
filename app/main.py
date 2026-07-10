@@ -20,6 +20,7 @@ from .broker_flows import broker_flow_text, sync_broker_flows
 from .history import get_price_history
 from .holders import holders_summary_line, sync_holders
 from .line_client import LineClient, verify_signature
+from .market_calendar import is_scheduled_closed_today, taipei_today_iso
 from .market_health import build_market_health_message
 from .parser import summarize_portfolio
 from .pending import PendingChoices
@@ -254,17 +255,27 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
 
     @app.post("/admin/morning-macro")
     async def morning_macro(request: Request) -> dict:
-        """平日 08:00：盤前總經快報（美日韓指數、ADR、匯率）。"""
+        """平日 08:00：盤前總經快報（美日韓指數、ADR、匯率）。國定休市日跳過。"""
         _check_cron_secret(request)
+        if await is_scheduled_closed_today(request.app.state.deps.http):
+            logger.info("今日台股休市（國定假日），跳過盤前總經快報")
+            return {"ok": True, "pushed": 0, "skipped": "market closed"}
         pushed = await _broadcast(request, await build_macro_brief(request.app.state.deps.http))
         logger.info("盤前總經快報 pushed=%s", pushed)
         return {"ok": True, "pushed": pushed}
 
     @app.post("/admin/morning-open")
     async def morning_open(request: Request) -> dict:
-        """平日 08:30：開盤前導航（ADR 隱含價、昨日台股、今日除權息）。"""
+        """平日 08:30：開盤前導航（試撮、昨日台股、今日除權息）。國定假日或無試撮（颱風臨時休市）跳過。"""
         _check_cron_secret(request)
-        pushed = await _broadcast(request, await build_open_brief(request.app.state.deps))
+        if await is_scheduled_closed_today(request.app.state.deps.http):
+            logger.info("今日台股休市（國定假日），跳過開盤前導航")
+            return {"ok": True, "pushed": 0, "skipped": "market closed"}
+        brief = await build_open_brief(request.app.state.deps)
+        if brief is None:
+            logger.info("8:30 無試撮資料（颱風臨時休市或 MIS 異常），跳過開盤前導航")
+            return {"ok": True, "pushed": 0, "skipped": "no trial data"}
+        pushed = await _broadcast(request, brief)
         logger.info("開盤前導航 pushed=%s", pushed)
         return {"ok": True, "pushed": pushed}
 
@@ -322,6 +333,12 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         if not secret or not hmac.compare_digest(secret, provided):
             raise HTTPException(status_code=403, detail="invalid cron secret")
         deps = request.app.state.deps
+        today = taipei_today_iso()
+        latest_rows = await deps.db.get("daily_closes?select=trade_date&order=trade_date.desc&limit=1")
+        latest_date = str(latest_rows[0]["trade_date"]) if latest_rows else None
+        if latest_date != today:
+            logger.info("今日無新收盤資料（休市或快照失敗），跳過選股推播 latest=%s", latest_date)
+            return {"ok": True, "pushed": 0, "skipped": "no fresh close data", "date": today}
         result = await run_daily_picks(deps)
         pushed = 0
         if has_picks(result):

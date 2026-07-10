@@ -274,11 +274,22 @@ class FakePostgrest:
         raise AssertionError(f"unexpected method {method}")
 
 
+MIS_FIXTURES = {
+    "t00": {"c": "t00", "n": "發行量加權股價指數", "z": "45479.11", "y": "46556.39", "t": "08:35:00"},
+    "2330": {
+        "c": "2330", "n": "台積電", "z": "2440.0000", "y": "2460.0000", "t": "08:35:00",
+        "d": "20260708", "o": "2450.0000", "h": "2470.0000", "l": "2430.0000", "v": "25000",
+    },
+}
+
+
 class BotRuntime:
-    def __init__(self, twse_response=TWSE_OK, rpc_overrides=None):
+    def __init__(self, twse_response=TWSE_OK, rpc_overrides=None, holiday_fixture=None, mis_fixtures=None):
         self.postgrest = FakePostgrest()
         self.replies = []
         self.rpc_fixtures = {**RPC_FIXTURES, **(rpc_overrides or {})}
+        self.holiday_fixture = holiday_fixture or []
+        self.mis_fixtures = MIS_FIXTURES if mis_fixtures is None else mis_fixtures
 
         def route(request: httpx.Request) -> httpx.Response:
             url = str(request.url)
@@ -306,20 +317,15 @@ class BotRuntime:
                     },
                 )
             if url.startswith("https://mis.twse.com.tw/stock/api/getStockInfo.jsp"):
-                mis_fixtures = {
-                    "t00": {"c": "t00", "n": "發行量加權股價指數", "z": "45479.11", "y": "46556.39", "t": "08:35:00"},
-                    "2330": {
-                        "c": "2330", "n": "台積電", "z": "2440.0000", "y": "2460.0000", "t": "08:35:00",
-                        "d": "20260708", "o": "2450.0000", "h": "2470.0000", "l": "2430.0000", "v": "25000",
-                    },
-                }
                 requested = request.url.params.get("ex_ch", "")
                 msgs = []
                 for channel in requested.split("|"):
                     code = channel.split("_")[1].split(".")[0] if "_" in channel else channel
-                    if code in mis_fixtures:
-                        msgs.append(mis_fixtures[code])
+                    if code in self.mis_fixtures:
+                        msgs.append(self.mis_fixtures[code])
                 return httpx.Response(200, json={"rtcode": "0000", "msgArray": msgs})
+            if url.startswith("https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule"):
+                return httpx.Response(200, json=self.holiday_fixture)
             if url.startswith("https://www.twse.com.tw/rwd/zh/fund/T86"):
                 return httpx.Response(200, json=LISTED_INSTITUTIONAL)
             if url.startswith("https://www.twse.com.tw/"):
@@ -746,6 +752,8 @@ def test_daily_picks_skips_strategies_without_data():
 def test_daily_picks_push_endpoint():
     with BotRuntime() as rt:
         rt.send("登入dada")
+        # 今日（conftest 固定為 2026-07-10）有新收盤資料 → 正常推播
+        rt.postgrest.db["daily_closes"].append({"stock_no": "2330", "trade_date": "2026-07-10", "close": 2465.0})
         response = rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "cron-secret"})
         assert response.status_code == 200
         payload = response.json()
@@ -759,6 +767,20 @@ def test_daily_picks_push_endpoint():
         assert "🎯 每日選股" in push["messages"][1]["altText"]
 
         assert rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "wrong"}).status_code == 403
+
+
+def test_daily_picks_skipped_when_no_fresh_close():
+    """休市日（颱風/假日）快照沒有今日資料 → 不重複推播前一日選股。"""
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.postgrest.db["daily_closes"].append({"stock_no": "2330", "trade_date": "2026-07-09", "close": 2465.0})
+        pushes_before = len(rt.replies)
+        response = rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "cron-secret"})
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["pushed"] == 0
+        assert payload["skipped"] == "no fresh close data"
+        assert len(rt.replies) == pushes_before  # 沒有任何 LINE 推播
 
 
 def test_market_health_command():
@@ -799,6 +821,7 @@ def test_market_health_command():
 def test_daily_picks_push_includes_health():
     with BotRuntime() as rt:
         rt.send("登入dada")
+        rt.postgrest.db["daily_closes"].append({"stock_no": "2330", "trade_date": "2026-07-10", "close": 2465.0})
         rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "cron-secret"})
         push = rt.replies[-1]
         assert len(push["messages"]) == 2
