@@ -1,0 +1,41 @@
+app/premarket.py
+  s_7e7fe61c7f8490::t_985a7fc215dca8 211-212,221-227
+app/main.py
+  s_7e7fe61c7f8490::t_40d0c12bec90f7 258,260-262,269,271-278
+  s_7e7fe61c7f8490::t_f985f25dc1f648 23
+  s_7e7fe61c7f8490::t_017b9f695f6d25 336-341
+tests/test_market_calendar.py
+  s_7e7fe61c7f8490::t_6992ec3944455c 1-22
+tests/conftest.py
+  s_7e7fe61c7f8490::t_39ebf867fe9566 1-2,5,13-19
+tests/test_premarket.py
+  s_7e7fe61c7f8490::t_970ee313c4e162 58-87
+app/market_calendar.py
+  s_7e7fe61c7f8490::t_e75fa3d1ba9a0e 49
+  s_7e7fe61c7f8490::t_58e358357133a0 22-29,31
+  s_7e7fe61c7f8490::t_097a32946b4cb4 1-6,8-20,30,32-48,50-52
+  s_7e7fe61c7f8490::t_9b1231aeb7e10a 7
+  s_7e7fe61c7f8490::t_5eddbdb33f71b0 21
+tests/test_bot.py
+  s_7e7fe61c7f8490::t_ca79a3531f7dbd 277-285,287,291-292
+  s_7e7fe61c7f8490::t_7b6010408f4a26 755-756
+  s_7e7fe61c7f8490::t_8a613e9e2528d1 324-325,327-328
+  s_7e7fe61c7f8490::t_1cfede58bb5d51 772-785
+  s_7e7fe61c7f8490::t_c7f99d45c4d5bb 824
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ecb08e3db13effc5ae07f0273383654cf92017aa",
+  "prompts": {},
+  "sessions": {
+    "s_7e7fe61c7f8490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59fc179f-d8b1-4c7e-9d5c-32a2b7e046cc",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
