@@ -1,0 +1,36 @@
+app/indicators.py
+  s_7e7fe61c7f8490::t_7a88f18ccf731e 166-172,181-182
+app/flex.py
+  s_7e7fe61c7f8490::t_752621f4e0b65a 2
+  s_7e7fe61c7f8490::t_000ce8a7b585e3 141-155,157,177-183
+  s_7e7fe61c7f8490::t_fcc607e4e8c9cc 267
+tests/test_indicators.py
+  s_7e7fe61c7f8490::t_f867bfb5509c73 142-151
+tests/test_bot.py
+  s_7e7fe61c7f8490::t_322ad8e76216c5 1052-1065
+tests/test_parser.py
+  s_7e7fe61c7f8490::t_b49595e09c65dd 39-49
+app/chart.py
+  s_7e7fe61c7f8490::t_2847e3baf662f9 15
+tests/test_flex.py
+  s_7e7fe61c7f8490::t_f867bfb5509c73 61-82
+app/parser.py
+  s_7e7fe61c7f8490::t_db036d26cc3a88 56,63
+  s_7e7fe61c7f8490::t_e9c8304a6a5984 16-18,20-23,26-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "5c787a8d618d2b7600da4a864f79423cbb1cccb3",
+  "prompts": {},
+  "sessions": {
+    "s_7e7fe61c7f8490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59fc179f-d8b1-4c7e-9d5c-32a2b7e046cc",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
