@@ -139,3 +139,13 @@ def test_bollinger_series_known_value():
     assert abs(mid[19] - 101.0) < 1e-9
     assert abs(upper[19] - (101.0 + 2 * std)) < 1e-9
     assert abs(lower[19] - (101.0 - 2 * std)) < 1e-9
+
+
+def test_compute_indicators_includes_macd_and_bollinger():
+    ind = compute_indicators(_rows([float(100 + i) for i in range(70)]))
+    assert ind["macd_hist"] is not None
+    assert 0.8 <= ind["percent_b"] <= 1.0  # 等速上漲 → 收盤貼近上軌
+
+    short = compute_indicators(_rows([1.0, 2.0]))
+    assert short["macd_hist"] is None
+    assert short["percent_b"] is None

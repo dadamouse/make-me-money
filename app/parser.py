@@ -13,21 +13,19 @@ HELP_TEXT = "\n".join(
         "6️⃣ 大盤體檢｜指數、量能、法人、融資、寬度、VIX",
         "",
         "📝 常用指令（照著打即可）",
-        "▸ 登入dada",
-        "▸ 切換媽媽",
-        "▸ 新增2330 1000 850",
+        "▸ 登入你的名字｜第一次使用",
+        "▸ 切換家人名字｜幫家人記帳",
+        "▸ +2330 1000 850｜新增持股",
         "　（代號 股數 成本，後兩項可省略）",
-        "▸ 新增緯創（也可用名稱）",
-        "▸ 刪除2330",
-        "▸ 清空持股（需再回覆「確認」）",
-        "▸ 圖2330（技術分析圖）",
-        "▸ 訊號2330（支撐跌破法買賣訊號）",
+        "▸ -2330｜刪除持股",
+        "▸ 圖2330｜技術分析圖",
+        "▸ 訊號2330｜支撐跌破法買賣訊號",
+        "▸ 清空持股｜需再回覆「確認」",
         "",
         "💡 小技巧",
-        "・多行指令可一次貼上，會逐行執行",
-        "・代號自動補齊：00631 → 00631L",
-        "・出現候選清單時，回覆數字選擇",
-        "・卡片點個股看線圖、點按鈕開網頁版",
+        "・建檔最快：多行一次貼上，每行一筆「+代號 股數 成本」",
+        "・名稱、代號都能用：+台積電、圖捷敏ky 都通",
+        "・「新增/刪除」與「+/-」通用",
     ]
 )
 
@@ -55,14 +53,14 @@ def parse_command(raw_text: str | None) -> Command:
         return Command(action="login", name=m.group(1))
     if m := re.fullmatch(r"切換\s*(\S+)", text):
         return Command(action="switch", name=m.group(1))
-    if m := re.fullmatch(rf"新增\s*(\S+?)(?:\s+{_NUMBER})?(?:\s+{_NUMBER})?", text):
+    if m := re.fullmatch(rf"(?:新增|[+＋])\s*(\S+?)(?:\s+{_NUMBER})?(?:\s+{_NUMBER})?", text):
         return Command(
             action="add",
             stock=m.group(1),
             shares=None if m.group(2) is None else float(m.group(2)),
             cost=None if m.group(3) is None else float(m.group(3)),
         )
-    if m := re.fullmatch(r"刪除\s*(\S+)", text):
+    if m := re.fullmatch(r"(?:刪除|[-－])\s*(\S+)", text):
         return Command(action="remove", stock=m.group(1))
     if re.fullmatch(r"我的股票|簡易持股|清單|列表", text):
         return Command(action="list")

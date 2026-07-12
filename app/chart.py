@@ -12,7 +12,7 @@ import pandas as pd  # noqa: E402
 from .indicators import bollinger_series, kd_series, macd_series, rsi_series  # noqa: E402
 
 CHART_TTL_SECONDS = 900
-CHART_ASPECT_RATIO = "16:13"  # 對應 figratio，供 Flex hero 使用
+CHART_ASPECT_RATIO = "13:10"  # 實際輸出約 953×736（含新副圖），供 Flex hero 使用
 
 # 主圖各線顏色（圖例與繪線共用同一組定義，保證對得上）
 _MA_COLORS = {5: "#FB8C00", 20: "#1E88E5", 60: "#8E24AA"}

@@ -58,3 +58,25 @@ def test_flex_alt_text_is_truncated():
     entries = [{**TSMC, "stock_no": str(1000 + i)} for i in range(50)]
     message = build_portfolio_message("dada", entries)
     assert len(message["altText"]) <= 400
+
+
+def test_flex_shows_macd_and_bollinger_row():
+    entry = {
+        **TSMC,
+        "indicators": {"ma5": 2300.0, "ma20": 2250.0, "ma60": None, "rsi14": 62.0, "k": 70.0, "d": 65.0,
+                       "j": 80.0, "macd_hist": 12.34, "percent_b": 0.87},
+    }
+    content = dump(build_portfolio_message("測試", [entry]))
+    assert "MACD柱 +12.34" in content
+    assert "布林 近上軌（%b 0.87）" in content
+
+
+def test_flex_bollinger_labels():
+    from app.flex import _bollinger_label
+
+    assert _bollinger_label(1.05) == "衝出上軌"
+    assert _bollinger_label(0.87) == "近上軌"
+    assert _bollinger_label(0.6) == "通道中上"
+    assert _bollinger_label(0.3) == "通道中下"
+    assert _bollinger_label(0.05) == "近下軌"
+    assert _bollinger_label(-0.1) == "跌破下軌"

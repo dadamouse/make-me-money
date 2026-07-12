@@ -36,6 +36,17 @@ def test_parse_remove():
     assert parse_command("刪除2330") == Command(action="remove", stock="2330")
 
 
+def test_parse_add_shorthand_plus():
+    assert parse_command("+2330 1000 850") == Command(action="add", stock="2330", shares=1000, cost=850)
+    assert parse_command("+2330") == Command(action="add", stock="2330", shares=None, cost=None)
+    assert parse_command("＋台積電") == Command(action="add", stock="台積電", shares=None, cost=None)  # 全形＋
+
+
+def test_parse_remove_shorthand_minus():
+    assert parse_command("-2330") == Command(action="remove", stock="2330")
+    assert parse_command("－捷敏ky") == Command(action="remove", stock="捷敏ky")  # 全形－
+
+
 def test_parse_list():
     assert parse_command("我的股票") == Command(action="list")
     assert parse_command("清單") == Command(action="list")

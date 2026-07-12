@@ -163,6 +163,13 @@ def compute_indicators(rows: list[dict]) -> dict:
     closes = [r["close"] for r in rows if r.get("close") is not None]
     k, d = stochastic_kd(rows)
     j = 3 * k - 2 * d if k is not None and d is not None else None
+    _, _, macd_hist = macd_series(closes)
+    boll_upper, _, boll_lower = bollinger_series(closes)
+    upper = boll_upper[-1] if boll_upper else None
+    lower = boll_lower[-1] if boll_lower else None
+    percent_b = None
+    if upper is not None and lower is not None and upper > lower:
+        percent_b = (closes[-1] - lower) / (upper - lower)
     return {
         "ma5": sma(closes, 5),
         "ma20": sma(closes, 20),
@@ -171,4 +178,6 @@ def compute_indicators(rows: list[dict]) -> dict:
         "k": k,
         "d": d,
         "j": j,
+        "macd_hist": macd_hist[-1] if macd_hist else None,
+        "percent_b": percent_b,
     }

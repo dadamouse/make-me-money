@@ -1049,3 +1049,17 @@ def test_missing_quote_shows_warning():
         rt.send("新增2330")
         rt.send("我的股票")
         assert "⚠️ 查無報價" in rt.last_reply()
+
+
+def test_multiline_shorthand_add_and_remove():
+    """小技巧宣稱的用法要真的可行：多行貼上，每行一筆 +代號 股數 成本；- 刪除。"""
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("+2330 1000 850\n+0050 2000 100")
+        reply = rt.last_reply()
+        assert "已為 dada 新增 台積電（2330・上市）1,000 股＠850" in reply
+        assert "已為 dada 新增 元大台灣50（0050・上市）2,000 股＠100" in reply
+        rt.send("-2330")
+        assert "已刪除" in rt.last_reply()
+        codes = {h["stock_no"] for h in rt.postgrest.db["holdings"]}
+        assert codes == {"0050"}

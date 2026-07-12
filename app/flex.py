@@ -1,4 +1,5 @@
 """「我的股票」的 LINE Flex Message 版面。"""
+from .chart import CHART_ASPECT_RATIO
 from .parser import format_number, format_portfolio, format_roc_date, sign_of, summarize_portfolio
 
 GAIN_COLOR = "#E53935"  # 台股慣例：紅漲
@@ -137,8 +138,23 @@ def _flow_rows(item: dict) -> list[dict]:
     return [{"type": "text", "size": "xxs", "wrap": True, "contents": spans}]
 
 
+def _bollinger_label(percent_b: float) -> str:
+    """%b 位置翻成白話：價格在布林通道的哪一段。"""
+    if percent_b > 1:
+        return "衝出上軌"
+    if percent_b >= 0.8:
+        return "近上軌"
+    if percent_b >= 0.5:
+        return "通道中上"
+    if percent_b >= 0.2:
+        return "通道中下"
+    if percent_b >= 0:
+        return "近下軌"
+    return "跌破下軌"
+
+
 def _indicator_rows(item: dict, close: float) -> list[dict]:
-    """技術指標兩行：均線（含站上↑跌破↓）與 RSI/KD。資料不足的指標自動省略。"""
+    """技術指標三行：均線（含站上↑跌破↓）、RSI/KD、MACD/布林。資料不足的指標自動省略。"""
     ind = item.get("indicators") or {}
     rows = []
     ma_parts = [
@@ -158,6 +174,13 @@ def _indicator_rows(item: dict, close: float) -> list[dict]:
         osc_parts.append(kd_text)
     if osc_parts:
         rows.append(_text("｜".join(osc_parts), size="xxs", color=MUTED_COLOR))
+    trend_parts = []
+    if ind.get("macd_hist") is not None:
+        trend_parts.append(f"MACD柱 {ind['macd_hist']:+.2f}")
+    if ind.get("percent_b") is not None:
+        trend_parts.append(f"布林 {_bollinger_label(ind['percent_b'])}（%b {ind['percent_b']:.2f}）")
+    if trend_parts:
+        rows.append(_text("｜".join(trend_parts), size="xxs", color=MUTED_COLOR))
     return rows
 
 
@@ -241,7 +264,7 @@ def build_chart_bubble(
     bubble = {
         "type": "bubble",
         "size": size,
-        "hero": {"type": "image", "url": image_url, "size": "full", "aspectRatio": "16:13", "aspectMode": "fit"},
+        "hero": {"type": "image", "url": image_url, "size": "full", "aspectRatio": CHART_ASPECT_RATIO, "aspectMode": "fit"},
         "body": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": body_rows},
     }
     if page_url:
