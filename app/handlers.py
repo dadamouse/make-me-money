@@ -285,13 +285,27 @@ def stock_web_url(deps: Deps, stock_no: str) -> str:
     return f"{deps.base_url}/s/{stock_no}?sig={stock_sig(stock_no, deps.sign_key)}"
 
 
+async def fetch_chart_institutional(deps: Deps, stock_no: str, limit: int = 90) -> list[dict]:
+    """線圖法人面板用：外資/投信/自營商每日買賣超（由舊到新；查失敗回空，面板自動省略）。"""
+    try:
+        rows = await deps.db.get(
+            f"daily_institutional?stock_no=eq.{quote(stock_no)}"
+            f"&select=trade_date,foreign_net,trust_net,dealer_net&order=trade_date.desc&limit={limit}"
+        )
+        return list(reversed(rows))
+    except Exception:
+        logger.warning("法人資料查詢失敗 stock_no=%s", stock_no, exc_info=True)
+        return []
+
+
 async def _render_chart_reply(deps: Deps, stock: dict) -> str | dict:
     history = await get_price_history(deps.db, deps.twse, stock["stock_no"], stock.get("market"))
     # 點圖當下抓 MIS 即時價拼上最後一根 K 棒（盤中即時、盤後為當日收盤）
     history = merge_realtime_bar(history, await deps.twse.fetch_realtime(stock["stock_no"], stock.get("market")))
     if len(history) < _MIN_CHART_ROWS:
         return f"❌ {_stock_label(stock)} 歷史資料不足，暫時畫不出線圖。"
-    png = render_kline_png(history, f"{stock['stock_no']} {stock['name']}")
+    institutional = await fetch_chart_institutional(deps, stock["stock_no"])
+    png = render_kline_png(history, f"{stock['stock_no']} {stock['name']}", institutional=institutional)
     chart_id = deps.charts.put(png)
     image_url = f"{deps.base_url}/charts/{chart_id}.png"
     indicators = compute_indicators(history)
@@ -335,7 +349,10 @@ async def _handle_charts_all(deps: Deps, member: dict) -> str | dict | DeferredR
                 if len(history) < _MIN_CHART_ROWS:
                     skipped.append(code)
                     continue
-                png = render_kline_png(history, f"{code} {stock['name']}")
+                png = render_kline_png(
+                    history, f"{code} {stock['name']}",
+                    institutional=await fetch_chart_institutional(deps, code),
+                )
                 chart_id = deps.charts.put(png)
                 image_url = f"{deps.base_url}/charts/{chart_id}.png"
                 bubbles.append(

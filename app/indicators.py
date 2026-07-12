@@ -127,6 +127,20 @@ def macd_series(closes: list[float], fast: int = 12, slow: int = 26, signal: int
     return dif, signal_out, hist
 
 
+def bollinger_series(closes: list[float], period: int = 20, k: float = 2.0) -> tuple[list, list, list]:
+    """布林通道 (上軌, 中軌, 下軌) 序列：中軌為 SMA，上下軌 ± k 倍母體標準差；資料不足處為 None。"""
+    n = len(closes)
+    upper: list[float | None] = [None] * n
+    mid: list[float | None] = [None] * n
+    lower: list[float | None] = [None] * n
+    for i in range(period - 1, n):
+        window = closes[i - period + 1 : i + 1]
+        mean = sum(window) / period
+        std = (sum((value - mean) ** 2 for value in window) / period) ** 0.5
+        upper[i], mid[i], lower[i] = mean + k * std, mean, mean - k * std
+    return upper, mid, lower
+
+
 def obv_series(rows: list[dict]) -> list[float | None]:
     """OBV 序列：收漲加量、收跌減量；缺量能的日子沿用前值。"""
     out: list[float | None] = []

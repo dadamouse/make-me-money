@@ -1,5 +1,5 @@
 from app.history import parse_tpex_month_rows, parse_twse_month_rows
-from app.indicators import compute_indicators, kd_series, rsi, rsi_series, sma, stochastic_kd
+from app.indicators import bollinger_series, compute_indicators, kd_series, rsi, rsi_series, sma, stochastic_kd
 
 
 def _rows(closes, spread=1.0):
@@ -122,3 +122,20 @@ def test_parse_tpex_month_rows_converts_lots_to_shares():
     assert rows[0]["volume"] == 278000.0
     assert rows[0]["close"] == 17500.0
     assert parse_tpex_month_rows({}, "5274") == []
+
+
+def test_bollinger_series_flat_prices_has_zero_width():
+    closes = [100.0] * 25
+    upper, mid, lower = bollinger_series(closes)
+    assert upper[18] is None and mid[18] is None  # 不足 20 筆
+    assert upper[19] == mid[19] == lower[19] == 100.0  # 無波動 → 三軌重合
+
+
+def test_bollinger_series_known_value():
+    # 前 19 筆 100、第 20 筆 120：mean=101, 母體變異 = (19*1 + 361)/20 = 19 → std=√19
+    closes = [100.0] * 19 + [120.0]
+    upper, mid, lower = bollinger_series(closes)
+    std = 19 ** 0.5
+    assert abs(mid[19] - 101.0) < 1e-9
+    assert abs(upper[19] - (101.0 + 2 * std)) < 1e-9
+    assert abs(lower[19] - (101.0 - 2 * std)) < 1e-9

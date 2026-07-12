@@ -9,16 +9,22 @@ matplotlib.use("Agg")
 import mplfinance as mpf  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from .indicators import kd_series, rsi_series  # noqa: E402
+from .indicators import bollinger_series, kd_series, macd_series, rsi_series  # noqa: E402
 
 CHART_TTL_SECONDS = 900
 CHART_ASPECT_RATIO = "16:13"  # 對應 figratio，供 Flex hero 使用
+
+# 主圖各線顏色（圖例與繪線共用同一組定義，保證對得上）
+_MA_COLORS = {5: "#FB8C00", 20: "#1E88E5", 60: "#8E24AA"}
+_BOLL_COLOR = "#90A4AE"
+_INSTI_COLORS = {"外資": "#1E88E5", "投信": "#FB8C00", "自營": "#8E24AA"}
 
 # 台股慣例：紅漲綠跌；中文字型優先用容器內安裝的 Noto CJK
 _MARKET_COLORS = mpf.make_marketcolors(up="#E53935", down="#43A047", edge="inherit", wick="inherit", volume="in")
 _STYLE = mpf.make_mpf_style(
     base_mpf_style="yahoo",
     marketcolors=_MARKET_COLORS,
+    mavcolors=[_MA_COLORS[5], _MA_COLORS[20], _MA_COLORS[60]],
     rc={
         "font.sans-serif": ["Noto Sans CJK TC", "PingFang TC", "Heiti TC", "Arial Unicode MS", "sans-serif"],
         "axes.unicode_minus": False,
@@ -57,11 +63,27 @@ def _nan_filled(series: list) -> list[float]:
     return [value if value is not None else float("nan") for value in series]
 
 
-def _indicator_addplots(rows: list[dict]) -> tuple[list, tuple]:
-    """KDJ 與 RSI 副面板；資料不足的面板自動省略。回傳 (addplots, panel_ratios)。"""
+def _split_by_sign(values: list) -> tuple[list[float], list[float]]:
+    """把序列拆成正/負兩組（另一組補 NaN），供柱狀圖分色。"""
+    positive = [v if v is not None and v >= 0 else float("nan") for v in values]
+    negative = [v if v is not None and v < 0 else float("nan") for v in values]
+    return positive, negative
+
+
+def _indicator_addplots(rows: list[dict], has_institutional: bool) -> tuple[list, tuple, int | None]:
+    """KDJ／RSI／MACD 副面板；資料不足的面板自動省略。回傳 (addplots, panel_ratios, 法人面板編號)。"""
     addplots = []
-    panel_ratios = [3, 1]  # 主圖、成交量
+    panel_ratios = [4, 1]  # 主圖、成交量
     next_panel = 2
+    closes = [row["close"] for row in rows]
+
+    # 布林通道疊在主圖（中軌即 MA20，不重畫）
+    boll_upper, _, boll_lower = bollinger_series(closes)
+    if any(value is not None for value in boll_upper):
+        addplots += [
+            mpf.make_addplot(_nan_filled(boll_upper), panel=0, color=_BOLL_COLOR, width=0.9, linestyle="--"),
+            mpf.make_addplot(_nan_filled(boll_lower), panel=0, color=_BOLL_COLOR, width=0.9, linestyle="--"),
+        ]
 
     k_values, d_values, j_values = kd_series(rows)
     if any(value is not None for value in k_values):
@@ -73,12 +95,34 @@ def _indicator_addplots(rows: list[dict]) -> tuple[list, tuple]:
         panel_ratios.append(1)
         next_panel += 1
 
-    rsi_values = rsi_series([row["close"] for row in rows])
+    rsi_values = rsi_series(closes)
     if any(value is not None for value in rsi_values):
         addplots.append(mpf.make_addplot(_nan_filled(rsi_values), panel=next_panel, color="#6D4C41", width=1, ylabel="RSI"))
         panel_ratios.append(1)
+        next_panel += 1
 
-    return addplots, tuple(panel_ratios)
+    dif, dea, hist = macd_series(closes)
+    if any(value is not None for value in hist):
+        hist_pos, hist_neg = _split_by_sign(hist)
+        addplots.append(mpf.make_addplot(_nan_filled(dif), panel=next_panel, color="#FB8C00", width=1, ylabel="MACD"))
+        addplots.append(mpf.make_addplot(_nan_filled(dea), panel=next_panel, color="#1E88E5", width=1))
+        # 全 NaN 的柱狀序列會讓 mplfinance 計算軸範圍時炸掉，只畫有值的那組
+        for series, color in ((hist_pos, "#EF9A9A"), (hist_neg, "#A5D6A7")):
+            if any(value == value for value in series):  # NaN != NaN
+                addplots.append(mpf.make_addplot(series, panel=next_panel, type="bar", color=color))
+        panel_ratios.append(1)
+        next_panel += 1
+
+    institutional_panel = None
+    if has_institutional:
+        # 先用一條隱形零線把面板占住，法人柱狀圖之後用 matplotlib 直接畫（分組柱 mpf 不支援）
+        addplots.append(
+            mpf.make_addplot([0.0] * len(rows), panel=next_panel, color="#FFFFFF", width=0, alpha=0.0)
+        )
+        panel_ratios.append(1)
+        institutional_panel = next_panel
+
+    return addplots, tuple(panel_ratios), institutional_panel
 
 
 def render_index_png(rows: list[dict], title: str = "加權指數") -> bytes:
@@ -122,9 +166,45 @@ def render_index_png(rows: list[dict], title: str = "加權指數") -> bytes:
     return buffer.getvalue()
 
 
-def render_kline_png(rows: list[dict], title: str) -> bytes:
+def _draw_institutional_bars(ax, rows: list[dict], institutional: list[dict]) -> None:
+    """法人買賣超堆疊柱（單位：張）：同日買超往上疊、賣超往下疊，對齊 K 棒位置。"""
+    net_by_date = {str(item["trade_date"]): item for item in institutional}
+    keys = (("foreign_net", "外資"), ("trust_net", "投信"), ("dealer_net", "自營"))
+    positions = list(range(len(rows)))
+    stack_up = [0.0] * len(rows)
+    stack_down = [0.0] * len(rows)
+    for key, label in keys:
+        lots = [float(net_by_date.get(str(row["trade_date"]), {}).get(key) or 0) / 1000 for row in rows]
+        bottoms = [stack_up[i] if lots[i] >= 0 else stack_down[i] for i in positions]
+        ax.bar(positions, lots, bottom=bottoms, width=0.8, color=_INSTI_COLORS[label], label=label)
+        stack_up = [stack_up[i] + lots[i] if lots[i] >= 0 else stack_up[i] for i in positions]
+        stack_down = [stack_down[i] + lots[i] if lots[i] < 0 else stack_down[i] for i in positions]
+    ax.set_ylabel("法人(張)")
+    ax.axhline(0, color="#9E9E9E", linewidth=0.6)
+    ax.legend(loc="upper left", fontsize=7, ncol=3, framealpha=0.6)
+
+
+def _main_panel_legend(ax, df_len: int, has_bollinger: bool) -> None:
+    """主圖下緣圖例：標示各均線與布林軌道的顏色。"""
+    from matplotlib.lines import Line2D
+
+    handles = [
+        Line2D([0], [0], color=color, linewidth=1.4)
+        for n, color in _MA_COLORS.items()
+        if df_len >= n
+    ]
+    labels = [f"MA{n}" for n in _MA_COLORS if df_len >= n]
+    if has_bollinger:
+        handles.append(Line2D([0], [0], color=_BOLL_COLOR, linewidth=1.4, linestyle="--"))
+        labels.append("布林上下軌")
+    if handles:
+        ax.legend(handles, labels, loc="lower left", fontsize=8, ncol=len(handles), framealpha=0.6)
+
+
+def render_kline_png(rows: list[dict], title: str, institutional: list[dict] | None = None) -> bytes:
     """rows 由舊到新：{trade_date, open, high, low, close, volume}
-    → K 線＋MA＋成交量＋KDJ＋RSI 多面板 PNG。
+    → K 線＋MA＋布林通道＋成交量＋KDJ＋RSI＋MACD＋三大法人 多面板 PNG。
+    institutional：{trade_date, foreign_net, trust_net, dealer_net}（股數），缺省略該面板。
     """
     records = []
     for row in rows:
@@ -143,11 +223,22 @@ def render_kline_png(rows: list[dict], title: str) -> bytes:
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.set_index("Date")
 
-    addplots, panel_ratios = _indicator_addplots(rows)
-    buffer = io.BytesIO()
+    has_institutional = bool(institutional)
+    addplots, panel_ratios, institutional_panel = _indicator_addplots(rows, has_institutional)
     mav = tuple(n for n in (5, 20, 60) if len(df) >= n) or None
     optional_kwargs = {"addplot": addplots, "panel_ratios": panel_ratios} if addplots else {}
-    mpf.plot(
+
+    boll_upper, _, boll_lower = bollinger_series([row["close"] for row in rows])
+    has_bollinger = any(value is not None for value in boll_upper)
+    if has_bollinger:
+        optional_kwargs["fill_between"] = {
+            "y1": _nan_filled(boll_lower),
+            "y2": _nan_filled(boll_upper),
+            "alpha": 0.08,
+            "color": _BOLL_COLOR,
+        }
+
+    fig, axes = mpf.plot(
         df,
         type="candle",
         mav=mav,
@@ -157,7 +248,16 @@ def render_kline_png(rows: list[dict], title: str) -> bytes:
         figratio=(16, 13),
         figscale=1.2,
         tight_layout=True,
-        savefig={"fname": buffer, "dpi": 110, "bbox_inches": "tight"},
+        returnfig=True,
         **optional_kwargs,
     )
+    _main_panel_legend(axes[0], len(df), has_bollinger)
+    if institutional_panel is not None:
+        _draw_institutional_bars(axes[institutional_panel * 2], rows, institutional)
+
+    buffer = io.BytesIO()
+    fig.savefig(buffer, format="png", dpi=110, bbox_inches="tight")
+    import matplotlib.pyplot as plt
+
+    plt.close(fig)
     return buffer.getvalue()

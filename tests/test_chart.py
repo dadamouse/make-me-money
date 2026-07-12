@@ -42,3 +42,15 @@ def test_chart_store_ttl_and_expiry():
     assert store.get(chart_id) == b"fake-png"
     clock["now"] = 901
     assert store.get(chart_id) is None
+
+
+def test_render_kline_with_institutional_panel():
+    rows = _rows(40)
+    institutional = [
+        {"trade_date": r["trade_date"], "foreign_net": 500000, "trust_net": -20000, "dealer_net": 3000}
+        for r in rows[-10:]
+    ]
+    png = render_kline_png(rows, "2330 台積電", institutional=institutional)
+    assert png[:8] == PNG_MAGIC
+    # 多了 MACD＋法人面板，圖應比無法人版本高（檔案內容不同即可粗略驗證）
+    assert png != render_kline_png(rows, "2330 台積電")

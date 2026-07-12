@@ -14,7 +14,7 @@ from .chart import ChartStore, render_kline_png
 from .config import Settings, load_settings
 from .deps import Deps
 from .flex import build_picks_message
-from .handlers import DeferredReply, build_portfolio_entries, handle_text, picks_web_url
+from .handlers import DeferredReply, build_portfolio_entries, fetch_chart_institutional, handle_text, picks_web_url
 from .indicators import compute_indicators
 from .broker_flows import broker_flow_text, sync_broker_flows
 from .history import get_price_history
@@ -178,7 +178,10 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             history = await get_price_history(deps.db, deps.twse, stock_no, stock.get("market"))
             if len(history) < 5:
                 raise HTTPException(status_code=404, detail="insufficient history")
-            png = render_kline_png(history, f"{stock_no} {stock['name']}")
+            png = render_kline_png(
+                history, f"{stock_no} {stock['name']}",
+                institutional=await fetch_chart_institutional(deps, stock_no),
+            )
             deps.charts.put(png, key=cache_key)
         return Response(content=png, media_type="image/png")
 
