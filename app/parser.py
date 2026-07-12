@@ -176,6 +176,7 @@ def summarize_portfolio(entries: list[dict]) -> dict:
     items = []
     total_value = 0.0
     total_cost = 0.0
+    costed_value = 0.0  # 只累計有成本的持股市值：總損益不能被「沒記成本」的持股灌水
     for entry in entries:
         item = {**entry, "value": None, "pnl": None, "pct": None}
         quote = entry.get("quote")
@@ -184,10 +185,11 @@ def summarize_portfolio(entries: list[dict]) -> dict:
             total_value += item["value"]
             if entry["cost"] > 0:
                 total_cost += entry["cost"]
+                costed_value += item["value"]
                 item["pnl"] = item["value"] - entry["cost"]
                 item["pct"] = item["pnl"] / entry["cost"] * 100
         items.append(item)
-    total_pnl = total_value - total_cost if total_cost > 0 else None
+    total_pnl = costed_value - total_cost if total_cost > 0 else None
     return {"items": items, "total_value": total_value, "total_cost": total_cost, "total_pnl": total_pnl}
 
 

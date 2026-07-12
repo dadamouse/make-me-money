@@ -129,3 +129,18 @@ def test_format_portfolio_with_pnl_watching_and_totals():
 def test_format_portfolio_warns_when_no_quote():
     text = format_portfolio("dada", [{"stock_no": "6488", "name": "環球晶", "shares": 100, "cost": 0, "quote": None}])
     assert "6488 環球晶　⚠️ 查無報價" in text
+
+
+def test_summarize_total_pnl_excludes_costless_holdings():
+    """總損益只統計有成本的持股：無成本持股的市值不能灌進損益。"""
+    from app.parser import summarize_portfolio
+
+    entries = [
+        {"stock_no": "2330", "name": "台積電", "shares": 1000, "cost": 1_000_000,
+         "quote": {"date": "115/07/02", "close": 1100.0}},  # 賺 10 萬
+        {"stock_no": "0050", "name": "元大台灣50", "shares": 5000, "cost": 0,
+         "quote": {"date": "115/07/02", "close": 100.0}},  # 沒記成本，市值 50 萬
+    ]
+    summary = summarize_portfolio(entries)
+    assert summary["total_value"] == 1_100_000 + 500_000  # 總市值照算
+    assert summary["total_pnl"] == 100_000  # 總損益不含無成本那檔
