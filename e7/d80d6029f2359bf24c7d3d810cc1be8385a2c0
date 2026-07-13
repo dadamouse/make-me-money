@@ -1,0 +1,21 @@
+app/chart.py
+  s_7e7fe61c7f8490::t_a14bde4c7db35d 227
+  s_7e7fe61c7f8490::t_483fef7f1be757 255-258
+  s_7e7fe61c7f8490::t_bae30a74e98c7c 66-67,71,100,104,113-115,117-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "e7d80d6029f2359bf24c7d3d810cc1be8385a2c0",
+  "prompts": {},
+  "sessions": {
+    "s_7e7fe61c7f8490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59fc179f-d8b1-4c7e-9d5c-32a2b7e046cc",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
