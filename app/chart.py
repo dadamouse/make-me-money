@@ -63,18 +63,12 @@ def _nan_filled(series: list) -> list[float]:
     return [value if value is not None else float("nan") for value in series]
 
 
-def _split_by_sign(values: list) -> tuple[list[float], list[float]]:
-    """把序列拆成正/負兩組（另一組補 NaN），供柱狀圖分色。"""
-    positive = [v if v is not None and v >= 0 else float("nan") for v in values]
-    negative = [v if v is not None and v < 0 else float("nan") for v in values]
-    return positive, negative
-
-
-def _indicator_addplots(rows: list[dict], has_institutional: bool) -> tuple[list, tuple, int | None]:
-    """KDJ／RSI／MACD 副面板；資料不足的面板自動省略。回傳 (addplots, panel_ratios, 法人面板編號)。"""
+def _indicator_addplots(rows: list[dict], has_institutional: bool) -> tuple[list, tuple, dict]:
+    """KDJ／RSI／MACD 副面板；資料不足的面板自動省略。回傳 (addplots, panel_ratios, 面板編號表)。"""
     addplots = []
     panel_ratios = [4, 1]  # 主圖、成交量
     next_panel = 2
+    panels: dict[str, int] = {}
     closes = [row["close"] for row in rows]
 
     # 布林通道疊在主圖（中軌即 MA20，不重畫）
@@ -103,26 +97,32 @@ def _indicator_addplots(rows: list[dict], has_institutional: bool) -> tuple[list
 
     dif, dea, hist = macd_series(closes)
     if any(value is not None for value in hist):
-        hist_pos, hist_neg = _split_by_sign(hist)
+        # 柱狀圖不用 mpf 的 bar addplot（會畫成細碎虛線），改於 returnfig 後用 matplotlib 補實心柱
         addplots.append(mpf.make_addplot(_nan_filled(dif), panel=next_panel, color="#FB8C00", width=1, ylabel="MACD"))
         addplots.append(mpf.make_addplot(_nan_filled(dea), panel=next_panel, color="#1E88E5", width=1))
-        # 全 NaN 的柱狀序列會讓 mplfinance 計算軸範圍時炸掉，只畫有值的那組
-        for series, color in ((hist_pos, "#EF9A9A"), (hist_neg, "#A5D6A7")):
-            if any(value == value for value in series):  # NaN != NaN
-                addplots.append(mpf.make_addplot(series, panel=next_panel, type="bar", color=color))
         panel_ratios.append(1)
+        panels["macd"] = next_panel
         next_panel += 1
 
-    institutional_panel = None
     if has_institutional:
         # 先用一條隱形零線把面板占住，法人柱狀圖之後用 matplotlib 直接畫（分組柱 mpf 不支援）
         addplots.append(
             mpf.make_addplot([0.0] * len(rows), panel=next_panel, color="#FFFFFF", width=0, alpha=0.0)
         )
         panel_ratios.append(1)
-        institutional_panel = next_panel
+        panels["institutional"] = next_panel
 
-    return addplots, tuple(panel_ratios), institutional_panel
+    return addplots, tuple(panel_ratios), panels
+
+
+def _draw_macd_hist(ax, closes: list[float]) -> None:
+    """MACD 柱狀圖（DIF−DEA）：實心紅漲綠跌、貼齊零軸，比照市面看盤軟體。"""
+    _, _, hist = macd_series(closes)
+    positions = [i for i, value in enumerate(hist) if value is not None]
+    values = [hist[i] for i in positions]
+    colors = ["#E53935" if value >= 0 else "#43A047" for value in values]
+    ax.bar(positions, values, width=0.7, color=colors, alpha=0.85, zorder=0)
+    ax.axhline(0, color="#9E9E9E", linewidth=0.6)
 
 
 def render_index_png(rows: list[dict], title: str = "加權指數") -> bytes:
@@ -224,7 +224,7 @@ def render_kline_png(rows: list[dict], title: str, institutional: list[dict] | N
     df = df.set_index("Date")
 
     has_institutional = bool(institutional)
-    addplots, panel_ratios, institutional_panel = _indicator_addplots(rows, has_institutional)
+    addplots, panel_ratios, panels = _indicator_addplots(rows, has_institutional)
     mav = tuple(n for n in (5, 20, 60) if len(df) >= n) or None
     optional_kwargs = {"addplot": addplots, "panel_ratios": panel_ratios} if addplots else {}
 
@@ -252,8 +252,10 @@ def render_kline_png(rows: list[dict], title: str, institutional: list[dict] | N
         **optional_kwargs,
     )
     _main_panel_legend(axes[0], len(df), has_bollinger)
-    if institutional_panel is not None:
-        _draw_institutional_bars(axes[institutional_panel * 2], rows, institutional)
+    if "macd" in panels:
+        _draw_macd_hist(axes[panels["macd"] * 2], [row["close"] for row in rows])
+    if "institutional" in panels:
+        _draw_institutional_bars(axes[panels["institutional"] * 2], rows, institutional)
 
     buffer = io.BytesIO()
     fig.savefig(buffer, format="png", dpi=110, bbox_inches="tight")
