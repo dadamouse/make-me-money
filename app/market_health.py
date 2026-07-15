@@ -5,13 +5,32 @@ from datetime import datetime, timedelta, timezone
 from .chart import render_index_png
 from .deps import Deps
 from .indicators import rsi
+from .market_calendar import taipei_today_iso
 from .parser import format_number, sign_of
-from .premarket import USDTWD_SYMBOL, fetch_close_series, fetch_quote
+from .premarket import USDTWD_SYMBOL, fetch_close_series, fetch_quote, fetch_trial_quotes
 
 logger = logging.getLogger(__name__)
 
 _TAIPEI_TZ = timezone(timedelta(hours=8))
 _VIX_SYMBOL = "^VIX"
+
+
+async def _index_series_with_realtime(deps: Deps) -> tuple[list[dict], bool]:
+    """market_series（新到舊）；快照尚無今日資料時，用 MIS 即時加權指數補一筆今日暫定值。
+
+    回傳 (series_desc, 是否含即時點)。MIS 資料日期非今天（休市）或抓不到時不補。
+    """
+    series_desc = await deps.db.rpc("market_series", {"n": 60})
+    today = taipei_today_iso()
+    if series_desc and str(series_desc[0]["trade_date"]) == today:
+        return series_desc, False
+    quotes = await fetch_trial_quotes(deps.http)
+    t00 = quotes.get("t00") or {}
+    raw_date = str(t00.get("date") or "")
+    mis_date = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:]}" if len(raw_date) == 8 else None
+    if t00.get("last") and mis_date == today:
+        return [{"trade_date": today, "taiex": t00["last"], "amount": None}, *series_desc], True
+    return series_desc, False
 
 
 def _position_text(close: float, ma: float | None, label: str) -> str | None:
@@ -39,7 +58,7 @@ def _streak(values: list[float]) -> tuple[int, str]:
 async def build_market_health(deps: Deps) -> str:
     lines = []
     notes = []  # 白話解讀（描述現況，不做預測）
-    series_desc = await deps.db.rpc("market_series", {"n": 60})
+    series_desc, realtime = await _index_series_with_realtime(deps)
     closes_asc = [float(row["taiex"]) for row in reversed(series_desc)]
     amounts_asc = [float(row["amount"]) for row in reversed(series_desc) if row.get("amount") is not None]
 
@@ -47,7 +66,7 @@ async def build_market_health(deps: Deps) -> str:
         latest, prev = closes_asc[-1], closes_asc[-2]
         pct = (latest - prev) / prev * 100
         date_label = str(series_desc[0]["trade_date"])[5:].replace("-", "/")
-        lines.append(f"📋 大盤體檢（{date_label}）")
+        lines.append(f"📋 大盤體檢（{date_label}{' 即時' if realtime else ''}）")
         lines.append(f"加權指數 {format_number(latest)}（{sign_of(pct)}{pct:.1f}%）")
         ma20 = sum(closes_asc[-20:]) / 20 if len(closes_asc) >= 20 else None
         ma60 = sum(closes_asc[-60:]) / 60 if len(closes_asc) >= 60 else None
@@ -61,11 +80,13 @@ async def build_market_health(deps: Deps) -> str:
                 notes.append("・指數守在月線之上 → 短線結構還沒壞")
         if len(amounts_asc) >= 6:
             ratio = amounts_asc[-1] / (sum(amounts_asc[-6:-1]) / 5)
-            lines.append(f"量能：5 日均量的 {ratio:.2f} 倍")
-            if ratio >= 1.3:
-                notes.append("・帶量 → 今天的方向有大資金參與，行情可信度較高")
-            elif ratio <= 0.7:
-                notes.append("・量縮 → 觀望氣氛濃，今天的漲跌參考價值較低")
+            # 即時模式下成交金額還沒進快照，量能是前一交易日的
+            lines.append(f"量能{'（前一交易日）' if realtime else ''}：5 日均量的 {ratio:.2f} 倍")
+            if not realtime:
+                if ratio >= 1.3:
+                    notes.append("・帶量 → 今天的方向有大資金參與，行情可信度較高")
+                elif ratio <= 0.7:
+                    notes.append("・量縮 → 觀望氣氛濃，今天的漲跌參考價值較低")
         rsi_value = rsi(closes_asc, 14)
         if rsi_value is not None:
             lines.append(f"大盤 RSI14：{rsi_value:.0f}")
@@ -108,10 +129,16 @@ async def build_market_health(deps: Deps) -> str:
             lines.append(f"匯率：美元/台幣 {fx['price']:.2f}（{sign_of(fx['pct'])}{fx['pct']:.2f}%，{direction}）")
 
     flows = await deps.db.rpc("market_flow_series", {"n": 10})
-    insti_values = [float(row["insti_net"]) for row in flows if row.get("insti_net") is not None]
+    insti_rows = [row for row in flows if row.get("insti_net") is not None]
+    insti_values = [float(row["insti_net"]) for row in insti_rows]
     if insti_values:
         days, direction = _streak(insti_values)
-        lines.append(f"法人：今日 {sign_of(insti_values[0])}{format_number(round(insti_values[0] / 1000))} 張（連 {days} 日{direction}）")
+        # 法人買賣超盤後才公布：資料不是今天的就標日期，不寫「今日」
+        insti_date = str(insti_rows[0].get("trade_date") or "")
+        day_label = "今日" if insti_date == taipei_today_iso() else insti_date[5:].replace("-", "/")
+        lines.append(
+            f"法人：{day_label} {sign_of(insti_values[0])}{format_number(round(insti_values[0] / 1000))} 張（連 {days} 日{direction}）"
+        )
         if direction == "賣超":
             notes.append(f"・法人連 {days} 日賣超 → 大戶偏保守，反彈缺大買盤")
         else:
@@ -190,7 +217,7 @@ async def build_market_health_message(deps: Deps) -> dict:
         "body": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": _health_flex_lines(text)},
     }
     try:
-        series_desc = await deps.db.rpc("market_series", {"n": 60})
+        series_desc, _ = await _index_series_with_realtime(deps)
         if len(series_desc) >= 5:
             png = render_index_png(list(reversed(series_desc)))
             chart_id = deps.charts.put(png)

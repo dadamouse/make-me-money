@@ -85,3 +85,51 @@ def test_morning_open_skipped_without_trial_data():
         # 總經快報以國外資料為主，颱風天 8:00 無可靠休市訊號，仍照常發（已知限制）
         response = rt.client.post("/admin/morning-macro", headers={"x-cron-secret": "cron-secret"})
         assert response.json()["pushed"] == 1
+
+
+def test_fetch_quote_flags_data_date():
+    """日韓指數的 is_today：最後一根有效日線是不是該市場的今天。"""
+    import asyncio
+    import time
+
+    import httpx as _httpx
+
+    from app.premarket import fetch_quote
+
+    def run(last_ts):
+        def handler(request):
+            return _httpx.Response(200, json={"chart": {"result": [{
+                "meta": {"gmtoffset": 32400},  # JST
+                "timestamp": [last_ts - 86400, last_ts],
+                "indicators": {"quote": [{"close": [100.0, 101.0]}]},
+            }]}})
+
+        async def go():
+            async with _httpx.AsyncClient(transport=_httpx.MockTransport(handler)) as http:
+                return await fetch_quote(http, "^N225")
+
+        return asyncio.run(go())
+
+    now = time.time()
+    assert run(now)["is_today"] is True
+    assert run(now - 86400)["is_today"] is False
+
+
+def test_fetch_quote_without_meta_is_unknown():
+    """BotRuntime 這類沒給 meta/timestamp 的來源 → is_today None，不加標註。"""
+    import asyncio
+
+    import httpx as _httpx
+
+    from app.premarket import fetch_quote
+
+    def handler(request):
+        return _httpx.Response(200, json={"chart": {"result": [{
+            "indicators": {"quote": [{"close": [100.0, 101.0]}]},
+        }]}})
+
+    async def go():
+        async with _httpx.AsyncClient(transport=_httpx.MockTransport(handler)) as http:
+            return await fetch_quote(http, "^N225")
+
+    assert asyncio.run(go())["is_today"] is None

@@ -799,7 +799,8 @@ def test_market_health_command():
         assert "大盤 RSI14：" in content
         assert "匯率：美元/台幣 32.00（今日 +0.31%｜5日 +1.59%）" in content
         assert "台幣趨勢：月線上方 1.4%（貶值趨勢）" in content
-        assert "法人：今日 -242,259 張（連 1 日賣超）" in content
+        # 法人資料日（07/06）非今天（conftest 固定 07/10）→ 標日期而非「今日」
+        assert "法人：07/06 -242,259 張（連 1 日賣超）" in content
         assert "融資：-42,283 張｜5 日累計 +175,355 張（資料日 07/06）" in content
         assert "寬度：漲 1,177 家／跌 965 家｜創20日新高 339／新低 55" in content
         assert "VIX 恐慌指數：18.5（+12.1%）" in content
@@ -1063,3 +1064,31 @@ def test_multiline_shorthand_add_and_remove():
         assert "已刪除" in rt.last_reply()
         codes = {h["stock_no"] for h in rt.postgrest.db["holdings"]}
         assert codes == {"0050"}
+
+
+def test_market_health_merges_realtime_index_when_snapshot_stale():
+    """快照最新是 07/07，MIS 即時資料是今天（07/10）→ 體檢用即時指數並標「即時」。"""
+    mis = {
+        "t00": {"c": "t00", "n": "發行量加權股價指數", "z": "46100.00", "y": "45479.11",
+                "t": "11:30:00", "d": "20260710"},
+    }
+    with BotRuntime(mis_fixtures=mis) as rt:
+        rt.send("體檢")
+        message = rt.last_message()
+        assert "📋 大盤體檢（07/10 即時）" in message["altText"]
+        # 即時 46,100 vs 快照最新 45,479.11 → +1.4%（今天上漲就該顯示上漲）
+        assert "加權指數 46,100（+1.4%）" in message["altText"]
+        assert "量能（前一交易日）" in message["altText"]
+
+
+def test_market_health_keeps_snapshot_when_mis_stale():
+    """MIS 資料日不是今天（休市日情境）→ 維持快照數字，不標即時。"""
+    mis = {
+        "t00": {"c": "t00", "n": "發行量加權股價指數", "z": "46100.00", "y": "45479.11",
+                "t": "13:33:00", "d": "20260709"},
+    }
+    with BotRuntime(mis_fixtures=mis) as rt:
+        rt.send("體檢")
+        message = rt.last_message()
+        assert "📋 大盤體檢（07/07）" in message["altText"]
+        assert "加權指數 45,479.11（-2.3%）" in message["altText"]

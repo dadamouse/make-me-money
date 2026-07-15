@@ -45,7 +45,13 @@ async def fetch_trial_quotes(http: httpx.AsyncClient) -> dict[str, dict]:
                 except (TypeError, ValueError):
                     return None
 
-            quotes[item.get("c")] = {"name": item.get("n"), "last": _num("z"), "prev": _num("y"), "time": item.get("t")}
+            quotes[item.get("c")] = {
+                "name": item.get("n"),
+                "last": _num("z"),
+                "prev": _num("y"),
+                "time": item.get("t"),
+                "date": item.get("d"),  # yyyymmdd，供判斷是否為今日資料
+            }
         return quotes
     except Exception:
         logger.warning("MIS 試撮報價失敗", exc_info=True)
@@ -59,8 +65,32 @@ def _trial_line(label: str, quote: dict | None) -> str | None:
     return f"{label} {format_number(quote['last'])}（{sign_of(pct)}{pct:.1f}%，{quote.get('time') or ''}）"
 
 
+def _last_bar_is_today(result: dict) -> bool | None:
+    """最後一根有效日線是否為該市場的「今天」；缺 meta/timestamp 時回 None（不知道）。
+
+    用 meta.gmtoffset 換算交易所當地日期，不依賴系統時區資料庫。
+    """
+    try:
+        meta = result.get("meta") or {}
+        offset = meta.get("gmtoffset")
+        timestamps = result.get("timestamp") or []
+        raw_closes = result["indicators"]["quote"][0]["close"]
+        last_index = max(i for i, c in enumerate(raw_closes) if c is not None)
+        if offset is None or last_index >= len(timestamps):
+            return None
+        shift = timedelta(seconds=offset)
+        bar_date = (datetime.fromtimestamp(timestamps[last_index], timezone.utc) + shift).date()
+        market_today = (datetime.now(timezone.utc) + shift).date()
+        return bar_date == market_today
+    except Exception:
+        return None
+
+
 async def fetch_quote(http: httpx.AsyncClient, symbol: str) -> dict | None:
-    """Yahoo v8 chart → {price, prev, pct}；以最近兩個有效收盤計算漲跌。"""
+    """Yahoo v8 chart → {price, prev, pct, is_today}；以最近兩個有效收盤計算漲跌。
+
+    is_today：price 是否為該市場今日行情（False＝昨收，None＝無法判斷）。
+    """
     try:
         response = await http.get(
             _YAHOO_CHART_URL.format(symbol=symbol),
@@ -73,7 +103,7 @@ async def fetch_quote(http: httpx.AsyncClient, symbol: str) -> dict | None:
         if len(closes) < 2:
             return None
         price, prev = closes[-1], closes[-2]
-        return {"price": price, "prev": prev, "pct": (price - prev) / prev * 100}
+        return {"price": price, "prev": prev, "pct": (price - prev) / prev * 100, "is_today": _last_bar_is_today(result)}
     except Exception:
         logger.warning("Yahoo 報價失敗 symbol=%s", symbol, exc_info=True)
         return None
@@ -126,17 +156,21 @@ def _interpret_macro(quotes: dict[str, dict | None], adr: dict | None, fx: dict 
         else:
             lines.append(f"・美股科技股持平（費半 {sign_of(pct)}{pct:.1f}%）→ 對台股影響中性")
 
-    asia = [q["pct"] for q in (quotes.get("^N225"), quotes.get("^KS11")) if q]
+    asia_quotes = [q for q in (quotes.get("^N225"), quotes.get("^KS11")) if q]
+    asia = [q["pct"] for q in asia_quotes]
     if asia:
         avg = sum(asia) / len(asia)
+        # 資料全是昨收時明講，避免把昨天的行情當成今天的亞洲情緒
+        stale = bool(asia_quotes) and all(q.get("is_today") is False for q in asia_quotes)
+        subject = "日韓股市昨日" if stale else "日韓股市"
         if avg <= -1.5:
-            lines.append(f"・日韓股市同步走弱（平均 {avg:.1f}%）→ 亞洲整體風險情緒偏差")
+            lines.append(f"・{subject}同步走弱（平均 {avg:.1f}%）→ 亞洲整體風險情緒偏差")
             score -= 1
         elif avg >= 1.5:
-            lines.append(f"・日韓股市同步走強（平均 +{avg:.1f}%）→ 亞洲情緒偏樂觀")
+            lines.append(f"・{subject}同步走強（平均 +{avg:.1f}%）→ 亞洲情緒偏樂觀")
             score += 1
         else:
-            lines.append("・日韓股市波動不大 → 亞洲情緒平穩")
+            lines.append(f"・{subject}波動不大 → 亞洲情緒平穩")
 
     if adr:
         pct = adr["pct"]
@@ -174,8 +208,15 @@ async def build_macro_brief(http: httpx.AsyncClient) -> str:
 
     lines = [f"🌅 盤前總經快報（{now.strftime('%m/%d %H:%M')}）", "", "【隔夜國際市場】"]
     for label, symbol in MACRO_INDICES:
-        lines.append(_quote_line(label, quotes[symbol]))
-    lines.append("＊美股為隔夜收盤；日韓 9:00（台北 8:00）開盤，顯示為今日開盤初段走勢")
+        line = _quote_line(label, quotes[symbol])
+        # 日韓與台北同步 8:00 開盤，推播當下常常還沒有今日行情——標註資料日期避免誤讀
+        if symbol in ("^N225", "^KS11") and quotes[symbol] is not None:
+            if quotes[symbol].get("is_today") is True:
+                line += "（今日盤中）"
+            elif quotes[symbol].get("is_today") is False:
+                line += "（昨收）"
+        lines.append(line)
+    lines.append("＊美股為隔夜收盤；日韓 8:00（台北時間）剛開盤，開盤初期多半仍顯示昨收")
     lines.append("")
     lines.append("【台股連動指標】")
     lines.append(_quote_line("台積電 ADR", adr))
