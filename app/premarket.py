@@ -140,8 +140,8 @@ def _quote_line(label: str, quote: dict | None) -> str:
 
 
 def _interpret_macro(quotes: dict[str, dict | None], adr: dict | None, fx: dict | None) -> list[str]:
-    """把數字翻成白話：這代表什麼、今天該注意什麼。"""
-    lines = ["【📖 白話解讀】"]
+    """把數字翻成白話：這代表什麼、今天該注意什麼（不含段落標題）。"""
+    lines = []
     score = 0
 
     tech = quotes.get("^SOX") or quotes.get("^IXIC")
@@ -200,23 +200,23 @@ def _interpret_macro(quotes: dict[str, dict | None], adr: dict | None, fx: dict 
     return lines
 
 
-async def build_macro_brief(http: httpx.AsyncClient) -> str:
-    now = datetime.now(_TAIPEI_TZ)
+async def _macro_section(http: httpx.AsyncClient) -> tuple[list[str], list[str]]:
+    """國際市場＋台股連動指標區塊。回傳 (行情行, 白話解讀行)。"""
     quotes = {symbol: await fetch_quote(http, symbol) for _, symbol in MACRO_INDICES}
     adr = await fetch_quote(http, TSM_ADR_SYMBOL)
     fx = await fetch_quote(http, USDTWD_SYMBOL)
 
-    lines = [f"🌅 盤前總經快報（{now.strftime('%m/%d %H:%M')}）", "", "【隔夜國際市場】"]
+    lines = ["【隔夜國際市場】"]
     for label, symbol in MACRO_INDICES:
         line = _quote_line(label, quotes[symbol])
-        # 日韓與台北同步 8:00 開盤，推播當下常常還沒有今日行情——標註資料日期避免誤讀
+        # 日韓與台北同步 8:00 開盤——標註資料時點避免把昨收當今日行情
         if symbol in ("^N225", "^KS11") and quotes[symbol] is not None:
             if quotes[symbol].get("is_today") is True:
                 line += "（今日盤中）"
             elif quotes[symbol].get("is_today") is False:
                 line += "（昨收）"
         lines.append(line)
-    lines.append("＊美股為隔夜收盤；日韓 8:00（台北時間）剛開盤，開盤初期多半仍顯示昨收")
+    lines.append("＊美股為隔夜收盤；日韓 8:00（台北時間）開盤，行末標示資料時點")
     lines.append("")
     lines.append("【台股連動指標】")
     lines.append(_quote_line("台積電 ADR", adr))
@@ -225,9 +225,7 @@ async def build_macro_brief(http: httpx.AsyncClient) -> str:
         lines.append(f"美元/台幣 {fx['price']:.3f}　{_arrow(fx['pct'])}{abs(fx['pct']):.2f}%（{direction}）")
     else:
         lines.append("美元/台幣：資料暫缺")
-    lines.append("")
-    lines += _interpret_macro(quotes, adr, fx)
-    return "\n".join(lines)
+    return lines, _interpret_macro(quotes, adr, fx)
 
 
 async def _yesterday_taiwan_summary(deps: Deps) -> list[str]:
@@ -250,11 +248,14 @@ async def _yesterday_taiwan_summary(deps: Deps) -> list[str]:
 
 
 async def build_open_brief(deps: Deps) -> str | None:
-    """8:30 開盤前導航；平日試撮時段應有模擬撮合價，完全沒有＝臨時休市（颱風）或 MIS 異常，回 None 跳過推播。"""
+    """盤前導航（總經＋試撮合併版，8:40 前後推播）。
+
+    平日試撮時段應有模擬撮合價，完全沒有＝臨時休市（颱風）或 MIS 異常，回 None 跳過推播。
+    """
     now = datetime.now(_TAIPEI_TZ)
 
     # 注：曾有「ADR 隱含開盤價」換算，因 TSM ADR 存在 15-25% 常態溢價，
-    # 絕對換算值無預測意義而移除；方向參考用 8:05 的 ADR 漲跌%＋此處的試撮實價。
+    # 絕對換算值無預測意義而移除；方向參考用 ADR 漲跌%＋此處的試撮實價。
     trial = await fetch_trial_quotes(deps.http)
     trial_index = trial.get("t00")
     index_line = _trial_line("加權指數", trial_index)
@@ -262,7 +263,10 @@ async def build_open_brief(deps: Deps) -> str | None:
     if not index_line and not tsmc_line:
         return None
 
-    lines = [f"📣 開盤前導航（{now.strftime('%m/%d %H:%M')}）", ""]
+    macro_lines, macro_notes = await _macro_section(deps.http)
+    lines = [f"📣 盤前導航（{now.strftime('%m/%d %H:%M')}）", ""]
+    lines += macro_lines
+    lines.append("")
     lines.append("【台股試撮（8:30-9:00 模擬撮合）】")
     lines += [line for line in (index_line, tsmc_line) if line]
     lines.append("＊8:55 前試撮可掛假單，價格僅供參考")
@@ -288,6 +292,7 @@ async def build_open_brief(deps: Deps) -> str | None:
         lines.append("今日無除權息")
     lines.append("")
     lines.append("【📖 白話解讀】")
+    lines += macro_notes
     if trial_index and trial_index["last"] is not None and trial_index["prev"]:
         trial_pct = (trial_index["last"] - trial_index["prev"]) / trial_index["prev"] * 100
         if trial_pct <= -1:
