@@ -1,0 +1,24 @@
+tests/test_health.py
+  s_7e7fe61c7f8490::t_c8def1ef110437 84
+  s_7e7fe61c7f8490::t_37c88dafe79656 77-83,85-97
+app/health.py
+  s_7e7fe61c7f8490::t_cc350def9c4ac5 3,10
+  s_7e7fe61c7f8490::t_f8185d40c9c58e 136
+  s_7e7fe61c7f8490::t_ec90be631ef779 28-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "8dc9b1c6ab29d8293c6a0b6a027aa0757704df32",
+  "prompts": {},
+  "sessions": {
+    "s_7e7fe61c7f8490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59fc179f-d8b1-4c7e-9d5c-32a2b7e046cc",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
