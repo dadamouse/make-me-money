@@ -1,11 +1,13 @@
 """個股技術體檢：事實陳列＋白話說明，不做漲跌預測。rows 一律由舊到新。"""
 from .indicators import kd_series, macd_series, obv_series, rsi_series, sma
+from .parser import format_number
 
 _MA_SLOPE_LOOKBACK = 3     # MA20 斜率：與 3 日前比較
 _TREND_LOOKBACK = 5        # OBV／價量背離：近 5 日方向
 _BIAS_WARN_PCT = 7.0       # 20 日乖離率 ±7% 內視為未過熱
 _KD_HOT, _KD_COLD = 80.0, 20.0
 _RSI_HOT, _RSI_COLD = 70.0, 30.0
+_DEDUCTION_TREND_PCT = 1.0  # 未來 5 筆扣抵值變動 ±1% 內視為持平
 
 
 def _check_ma20(closes: list[float]) -> dict | None:
@@ -21,6 +23,24 @@ def _check_ma20(closes: list[float]) -> dict | None:
     if now < before:
         return {"ok": False, "text": "❌ 20日均線向下（趨勢偏空）"}
     return {"ok": True, "text": "✅ 20日均線走平"}
+
+
+def _check_ma20_deduction(closes: list[float]) -> dict | None:
+    """月線扣抵：明日將被扣掉的舊收盤 vs 今日收盤 → 預判 MA20 方向；再看未來 5 筆扣抵走向。"""
+    if len(closes) < 20:
+        return None
+    deduction = closes[-20]  # 明日換新收盤時被扣掉的那筆
+    future = closes[-20:-15]  # 未來 5 個交易日依序被扣掉的舊價
+    trend_pct = (future[-1] - future[0]) / future[0] * 100
+    if trend_pct <= -_DEDUCTION_TREND_PCT:
+        trend = "；未來一週扣抵走低（助漲）"
+    elif trend_pct >= _DEDUCTION_TREND_PCT:
+        trend = "；未來一週扣抵走高（助跌）"
+    else:
+        trend = ""
+    if closes[-1] >= deduction:
+        return {"ok": True, "text": f"✅ 月線扣抵 {format_number(deduction)}（收盤在上，月線易續揚{trend}）"}
+    return {"ok": False, "text": f"❌ 月線扣抵 {format_number(deduction)}（收盤在下，月線轉下彎{trend}）"}
 
 
 def _check_macd(closes: list[float]) -> dict | None:
@@ -113,6 +133,7 @@ def build_health_report(rows: list[dict]) -> str | None:
     closes = [r["close"] for r in rows if r.get("close") is not None]
     checks = [
         _check_ma20(closes),
+        _check_ma20_deduction(closes),
         _check_macd(closes),
         _check_kd(rows),
         _check_rsi(closes),

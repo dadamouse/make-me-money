@@ -74,3 +74,24 @@ def test_chart_command_includes_health_report():
         content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
         assert "技術體檢" in content
         assert "20日均線向上" in content
+
+
+def test_ma20_deduction_close_above_and_falling_deduction():
+    """收盤高於扣抵值 → 月線易續揚；未來 5 筆扣抵一路走低 → 助漲。"""
+    # 舊到新：前段 120→100 遞減（未來扣抵走低），後段回升到 150
+    closes = [120.0 - i for i in range(20)] + [130.0 + i for i in range(10)]
+    report = build_health_report(_rows(closes))
+    assert "✅ 月線扣抵 110（收盤在上，月線易續揚；未來一週扣抵走低（助漲））" in report
+
+
+def test_ma20_deduction_close_below_and_rising_deduction():
+    """收盤低於扣抵值 → 月線轉下彎；未來 5 筆扣抵走高 → 助跌。"""
+    closes = [100.0 + i for i in range(25)] + [80.0] * 5
+    report = build_health_report(_rows(closes))
+    assert "❌ 月線扣抵" in report
+    assert "未來一週扣抵走高（助跌）" in report
+
+
+def test_ma20_deduction_needs_20_closes():
+    report = build_health_report(_rows([100.0] * 19))
+    assert report is None or "扣抵" not in report
