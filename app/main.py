@@ -272,8 +272,8 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             return {"ok": True, "pushed": 0, "skipped": "market closed"}
         brief = await build_open_brief(request.app.state.deps)
         if brief is None:
-            logger.info("無試撮資料（颱風臨時休市或 MIS 異常），跳過盤前導航")
-            return {"ok": True, "pushed": 0, "skipped": "no trial data"}
+            logger.info("MIS 資料日非今日（颱風臨時休市），跳過盤前導航")
+            return {"ok": True, "pushed": 0, "skipped": "stale mis date"}
         pushed = await _broadcast(request, brief)
         logger.info("盤前導航 pushed=%s", pushed)
         return {"ok": True, "pushed": pushed}

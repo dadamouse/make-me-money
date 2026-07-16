@@ -74,18 +74,35 @@ def test_morning_open_skipped_on_scheduled_holiday():
         assert len(rt.replies) == pushes_before
 
 
-def test_morning_open_skipped_without_trial_data():
-    """颱風臨時休市不在休市日曆內：平日試撮時段應有撮合價，完全沒有就整則跳過。
-    總經已併入本則，颱風天早上因此完全安靜（合併前 8:00 總經無法判斷臨時休市）。"""
-    with BotRuntime(mis_fixtures={}) as rt:
+def test_morning_open_skipped_when_mis_date_stale():
+    """颱風臨時休市：MIS 資料日停在前一交易日 → 整則跳過（總經已併入，早上完全安靜）。"""
+    mis = {
+        "t00": {"c": "t00", "n": "發行量加權股價指數", "z": "-", "y": "46556.39",
+                "t": "13:33:00", "d": "20250101"},  # 固定用過去日期，永遠 != 今天
+    }
+    with BotRuntime(mis_fixtures=mis) as rt:
         rt.send("登入dada")
         pushes_before = len(rt.replies)
         response = rt.client.post("/admin/morning-open", headers={"x-cron-secret": "cron-secret"})
         assert response.status_code == 200
-        assert response.json() == {"ok": True, "pushed": 0, "skipped": "no trial data"}
+        assert response.json() == {"ok": True, "pushed": 0, "skipped": "stale mis date"}
         response = rt.client.post("/admin/morning-macro", headers={"x-cron-secret": "cron-secret"})
         assert response.json()["pushed"] == 0
         assert len(rt.replies) == pushes_before
+
+
+def test_morning_open_pushes_even_without_trial_price():
+    """z 是瞬時欄位、盤中也常缺值：MIS 沒回 z（甚至整包沒回）也要照發，試撮段顯示暫缺。
+    曾因把 z 當休市開關而連日漏發（2026-07 中旬）。"""
+    with BotRuntime(mis_fixtures={}) as rt:
+        rt.send("登入dada")
+        response = rt.client.post("/admin/morning-open", headers={"x-cron-secret": "cron-secret"})
+        assert response.status_code == 200
+        assert response.json()["pushed"] == 1
+        text = rt.replies[-1]["messages"][0]["text"]
+        assert "【隔夜國際市場】" in text  # 總經照發
+        assert "試撮價暫缺" in text
+        assert "＊8:55 前試撮可掛假單" not in text
 
 
 def test_fetch_quote_flags_data_date():

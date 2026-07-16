@@ -250,7 +250,9 @@ async def _yesterday_taiwan_summary(deps: Deps) -> list[str]:
 async def build_open_brief(deps: Deps) -> str | None:
     """盤前導航（總經＋試撮合併版，8:40 前後推播）。
 
-    平日試撮時段應有模擬撮合價，完全沒有＝臨時休市（颱風）或 MIS 異常，回 None 跳過推播。
+    休市判斷用 MIS 的資料日（d）：颱風臨時休市時交易時段不存在，d 會停在前一交易日。
+    成交價 z 是瞬時欄位、盤中也常為 "-"，不能拿來判斷休市（曾因此連日漏發），
+    缺值時只影響試撮兩行的顯示。d 拿不到時照發（寧可多發不漏發）。
     """
     now = datetime.now(_TAIPEI_TZ)
 
@@ -258,18 +260,23 @@ async def build_open_brief(deps: Deps) -> str | None:
     # 絕對換算值無預測意義而移除；方向參考用 ADR 漲跌%＋此處的試撮實價。
     trial = await fetch_trial_quotes(deps.http)
     trial_index = trial.get("t00")
+    mis_date = str((trial_index or {}).get("date") or "")
+    if mis_date and mis_date != now.strftime("%Y%m%d"):
+        return None  # MIS 資料日停在前一交易日 → 今日臨時休市（颱風）
+
     index_line = _trial_line("加權指數", trial_index)
     tsmc_line = _trial_line("台積電", trial.get("2330"))
-    if not index_line and not tsmc_line:
-        return None
 
     macro_lines, macro_notes = await _macro_section(deps.http)
     lines = [f"📣 盤前導航（{now.strftime('%m/%d %H:%M')}）", ""]
     lines += macro_lines
     lines.append("")
     lines.append("【台股試撮（8:30-9:00 模擬撮合）】")
-    lines += [line for line in (index_line, tsmc_line) if line]
-    lines.append("＊8:55 前試撮可掛假單，價格僅供參考")
+    if index_line or tsmc_line:
+        lines += [line for line in (index_line, tsmc_line) if line]
+        lines.append("＊8:55 前試撮可掛假單，價格僅供參考")
+    else:
+        lines.append("試撮價暫缺（撮合價為瞬時資料）；開盤後輸入「體檢」看即時指數")
 
     yesterday = await _yesterday_taiwan_summary(deps)
     if yesterday:
