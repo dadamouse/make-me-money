@@ -286,7 +286,14 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
     async def sync_broker_flows_endpoint(request: Request) -> dict:
         """平日晚間：抓持股的主力買賣超（MoneyDJ 分點頁，僅持股清單、間隔 2 秒）。"""
         _check_cron_secret(request)
-        result = await sync_broker_flows(request.app.state.deps)
+        try:
+            result = await sync_broker_flows(request.app.state.deps)
+        except Exception:  # TODO(debug): HF 上回 500 原因不明，暫時把 traceback 帶回 response 釐清
+            import traceback
+
+            tb = traceback.format_exc().splitlines()
+            logger.exception("主力買賣超同步失敗")
+            return {"ok": False, "error": tb[-4:]}
         logger.info("主力買賣超同步完成 %s", result)
         return {"ok": True, **result}
 
