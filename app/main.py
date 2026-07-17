@@ -50,6 +50,8 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
     async def lifespan(app: FastAPI):
         cfg = settings or load_settings()
         http = httpx.AsyncClient(transport=transport, timeout=15)
+        # fubon zco 的 TLS 憑證缺 Subject Key Identifier，OpenSSL 3 會拒連（2026-07-08 起主力資料斷更的原因）
+        scrape_http = httpx.AsyncClient(transport=transport, timeout=30, verify=False)
         app.state.settings = cfg
         app.state.line = LineClient(http, cfg.line_channel_access_token)
         app.state.deps = Deps(
@@ -60,6 +62,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             base_url=cfg.base_url,
             sign_key=cfg.line_channel_secret,
             http=http,
+            scrape_http=scrape_http,
         )
         async def startup_sync() -> None:
             """對照表同步移至背景＋總時限：外部 API 再慢再壞也不能擋住服務啟動。"""
@@ -72,6 +75,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         app.state.startup_sync_task = asyncio.create_task(startup_sync())
         yield
         await http.aclose()
+        await scrape_http.aclose()
 
     app = FastAPI(title="make-me-money", lifespan=lifespan)
 

@@ -61,15 +61,20 @@ def parse_zco(html_text: str, stock_no: str) -> dict | None:
 
 
 async def sync_broker_flows(deps: Deps) -> dict:
-    """抓所有成員持股的主力買賣超（每檔一頁、間隔 2 秒），upsert 冪等。"""
+    """抓所有成員持股的主力買賣超（每檔一頁、間隔 2 秒），upsert 冪等。
+
+    fubon 站的 TLS 憑證缺 Subject Key Identifier，OpenSSL 3 會拒連（2026-07-08 起），
+    故用關閉驗證的專用連線抓（僅公開展示資料）。
+    """
     holdings = await deps.db.get("holdings?select=stock_no")
     codes = sorted({str(row["stock_no"]) for row in holdings})
     rows = []
+    scraper = deps.scrape_http or deps.http
     for i, code in enumerate(codes):
         if i:
             await asyncio.sleep(_FETCH_INTERVAL_SECONDS)
         try:
-            response = await deps.http.get(ZCO_URL.format(stock_no=code), headers=_HEADERS, timeout=30)
+            response = await scraper.get(ZCO_URL.format(stock_no=code), headers=_HEADERS, timeout=30)
             response.raise_for_status()
             response.encoding = "cp950"
             parsed = parse_zco(response.text, code)
