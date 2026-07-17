@@ -1,0 +1,25 @@
+app/main.py
+  s_7e7fe61c7f8490::t_906a9c117cc696 78
+  s_7e7fe61c7f8490::t_03f3a2bf5176b4 53-54,65
+app/broker_flows.py
+  s_7e7fe61c7f8490::t_c33264cf01183e 72,77
+  s_7e7fe61c7f8490::t_fbb1eabaa7ad34 64-68
+app/deps.py
+  s_7e7fe61c7f8490::t_7864ab837293f7 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "7769e841f2b3593dd01e41b3fc0c359f7b3b6989",
+  "prompts": {},
+  "sessions": {
+    "s_7e7fe61c7f8490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59fc179f-d8b1-4c7e-9d5c-32a2b7e046cc",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
