@@ -1,0 +1,22 @@
+app/line_client.py
+  s_7e7fe61c7f8490::t_11f9440b7d19fe 5,9-10,25-31,51,60,74
+app/main.py
+  s_7e7fe61c7f8490::t_7a39ff734e6fae 195-196
+  s_7e7fe61c7f8490::t_45d47ee38b66a6 290
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "215a72dfaa7f0e4818fa30161cd7051d3776e481",
+  "prompts": {},
+  "sessions": {
+    "s_7e7fe61c7f8490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59fc179f-d8b1-4c7e-9d5c-32a2b7e046cc",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
