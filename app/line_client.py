@@ -2,8 +2,11 @@
 import base64
 import hashlib
 import hmac
+import logging
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 MULTICAST_URL = "https://api.line.me/v2/bot/message/multicast"
@@ -17,6 +20,13 @@ def verify_signature(channel_secret: str, body: bytes, signature: str | None) ->
         return False
     expected = base64.b64encode(hmac.new(channel_secret.encode(), body, hashlib.sha256).digest()).decode()
     return hmac.compare_digest(expected, signature)
+
+
+def _raise_with_detail(response: httpx.Response, context: str) -> None:
+    """LINE 的 4xx 會附上哪個欄位不合法；不記下來就只能瞎猜。"""
+    if response.status_code >= 400:
+        logger.error("LINE %s 失敗 %s %s", context, response.status_code, response.text[:500])
+    response.raise_for_status()
 
 
 class LineClient:
@@ -38,7 +48,7 @@ class LineClient:
             headers={"Authorization": f"Bearer {self._access_token}"},
             json={"replyToken": reply_token, "messages": [payload]},
         )
-        response.raise_for_status()
+        _raise_with_detail(response, "reply")
 
     async def push(self, user_id: str, message: str | dict) -> None:
         """主動推播給單一使用者（週報等個人化訊息）。"""
@@ -47,7 +57,7 @@ class LineClient:
             headers={"Authorization": f"Bearer {self._access_token}"},
             json={"to": user_id, "messages": [self._payload(message)]},
         )
-        response.raise_for_status()
+        _raise_with_detail(response, "push")
 
     async def multicast(self, user_ids: list[str], messages: str | dict | list) -> None:
         """主動推播給多位使用者；可一次帶多則訊息（LINE 上限 5 則）。"""
@@ -61,4 +71,4 @@ class LineClient:
                 "messages": [self._payload(m) for m in messages[:5]],
             },
         )
-        response.raise_for_status()
+        _raise_with_detail(response, "multicast")

@@ -192,7 +192,8 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
     def _check_cron_secret(request: Request) -> None:
         secret = request.app.state.settings.cron_secret
         provided = request.headers.get("x-cron-secret", "")
-        if not secret or not hmac.compare_digest(secret, provided):
+        # 以 bytes 比對：compare_digest 遇到非 ASCII 字串會拋 TypeError（曾因 pg_cron 存的 secret 混入非 ASCII 而 500）
+        if not secret or not hmac.compare_digest(secret.encode(), provided.encode()):
             raise HTTPException(status_code=403, detail="invalid cron secret")
 
     async def _start_backfill(request: Request) -> dict:
@@ -286,14 +287,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
     async def sync_broker_flows_endpoint(request: Request) -> dict:
         """平日晚間：抓持股的主力買賣超（MoneyDJ 分點頁，僅持股清單、間隔 2 秒）。"""
         _check_cron_secret(request)
-        try:
-            result = await sync_broker_flows(request.app.state.deps)
-        except Exception:  # TODO(debug): HF 上回 500 原因不明，暫時把 traceback 帶回 response 釐清
-            import traceback
-
-            tb = traceback.format_exc().splitlines()
-            logger.exception("主力買賣超同步失敗")
-            return {"ok": False, "error": tb[-4:]}
+        result = await sync_broker_flows(request.app.state.deps)
         logger.info("主力買賣超同步完成 %s", result)
         return {"ok": True, **result}
 
