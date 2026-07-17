@@ -162,6 +162,10 @@ RPC_FIXTURES = {
     "kd_golden_cross_picks": [
         {"stock_no": "0050", "stock_name": "元大台灣50", "close": 108.8, "k_val": 25.3, "d_val": 22.1},
     ],
+    "kd_pre_cross_picks": [
+        {"stock_no": "2353", "stock_name": "宏碁", "close": 71.2, "k_val": 22.5, "d_val": 26.0,
+         "trigger_price": 71.9, "gain_needed_pct": 0.98},
+    ],
     "momentum_picks": [
         {"stock_no": "2466", "stock_name": "冠西電", "close": 94.8, "base_close": 59.0, "gain_pct": 60.7},
     ],
@@ -699,7 +703,7 @@ def test_daily_picks_flex_carousel():
         assert "🎯 每日選股" in message["altText"]
         carousel = message["contents"]
         assert carousel["type"] == "carousel"
-        assert len(carousel["contents"]) == 7  # 七個策略各一張卡片（籌碼集中移至週六週報）
+        assert len(carousel["contents"]) == 8  # 八個策略各一張卡片（籌碼集中移至週六週報）
         content = json.dumps(carousel, ensure_ascii=False)
         assert "法人連買 3 日" in content
         assert "外資或投信連續 3 個交易日買超" in content  # 篩選邏輯說明
@@ -712,6 +716,9 @@ def test_daily_picks_flex_carousel():
         assert content.index("臺企銀") < content.index("合晶")
         assert "收 159 創20日新高，量為5日均量 2.1 倍" in content
         assert "K 25 上穿 D 22" in content
+        # KD 蓄勢交叉（明日觀察）：反解出的觸發價與需要的漲幅
+        assert "KD 蓄勢交叉（明日觀察）" in content
+        assert "K 22／D 26，明收 ≥71.9（+1.0%）即黃金交叉" in content
         assert "融資 -1,520 張、股價 +2.1%" in content
         assert "券資比 33.2%" in content
         assert "5 日強勢股" in content

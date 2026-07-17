@@ -42,6 +42,15 @@ def _format_kd(row: dict) -> dict:
     return _pick(row, f"K {float(row['k_val']):.0f} 上穿 D {float(row['d_val']):.0f}")
 
 
+def _format_kd_pre_cross(row: dict) -> dict:
+    gain = float(row["gain_needed_pct"])
+    trigger = format_number(float(row["trigger_price"]))
+    kd_text = f"K {float(row['k_val']):.0f}／D {float(row['d_val']):.0f}"
+    if gain <= 0:
+        return _pick(row, f"{kd_text}，明日平盤（≥{trigger}）即黃金交叉")
+    return _pick(row, f"{kd_text}，明收 ≥{trigger}（+{gain:.1f}%）即黃金交叉")
+
+
 def _format_margin_reduce(row: dict) -> dict:
     close = float(row["close"])
     prev_close = float(row["prev_close"])
@@ -104,6 +113,15 @@ _STRATEGIES = (
         "depth_key": "close_days",
         "min_depth": 15,
         "format": _format_kd,
+    },
+    {
+        "title": "KD 蓄勢交叉（明日觀察）",
+        "desc": "今日 K<30 且 K≤D 尚未交叉，反解明日黃金交叉觸發價（距今收 3% 內）；觸發價以今晚 8 日高低估算，隔日站上即為進場訊號",
+        "rpc": "kd_pre_cross_picks",
+        "args": {"limit_n": _LIMIT},
+        "depth_key": "close_days",
+        "min_depth": 15,
+        "format": _format_kd_pre_cross,
     },
     {
         "title": "5 日強勢股",

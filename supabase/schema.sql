@@ -268,6 +268,73 @@ language sql stable as $$
   limit limit_n
 $$;
 
+-- 策略四b：KD 蓄勢交叉（明日觀察名單）——今日 K≤D 且低檔，反解「明日收盤站上哪個價位就黃金交叉」
+-- SQL 版 KD 為 3 日簡單平均：K'=(RSV'+rsv今+rsv昨)/3、D'=(K'+K今+K昨)/3
+-- 交叉條件 K'>D' 化簡為 RSV' > 1.5*(K今+K昨) − rsv今 − rsv昨，再以 8 日高低換算觸發價
+-- 近似前提：明日盤中若突破 8 日高/低，實際門檻略有偏移（以收盤估算）
+create or replace function kd_pre_cross_picks(limit_n int default 5, p_market text default null)
+returns table (stock_no text, stock_name text, close numeric, k_val numeric, d_val numeric,
+               trigger_price numeric, gain_needed_pct numeric)
+language sql stable as $$
+  with base as (
+    select dc.stock_no, dc.trade_date, dc.close, dc.high, dc.low
+    from daily_closes dc
+    where dc.trade_date >= current_date - 40 and dc.high is not null and dc.low is not null
+  ),
+  rsv as (
+    select b.stock_no, b.trade_date, b.close,
+           count(*) over w as wcnt,
+           max(b.high) over w8 as h8,
+           min(b.low) over w8 as l8,
+           case when max(b.high) over w = min(b.low) over w then 50
+                else (b.close - min(b.low) over w) / (max(b.high) over w - min(b.low) over w) * 100 end as rsv_val
+    from base b
+    window w as (partition by b.stock_no order by b.trade_date rows between 8 preceding and current row),
+           w8 as (partition by b.stock_no order by b.trade_date rows between 7 preceding and current row)
+  ),
+  k_calc as (
+    select r.stock_no, r.trade_date, r.close, r.wcnt, r.h8, r.l8, r.rsv_val,
+           avg(r.rsv_val) over w2 as kv
+    from rsv r
+    window w2 as (partition by r.stock_no order by r.trade_date rows between 2 preceding and current row)
+  ),
+  kd as (
+    select k.stock_no, k.trade_date, k.close, k.wcnt, k.h8, k.l8, k.rsv_val, k.kv,
+           avg(k.kv) over w3 as dv,
+           lag(k.rsv_val) over (partition by k.stock_no order by k.trade_date) as rsv_prev,
+           lag(k.kv) over (partition by k.stock_no order by k.trade_date) as kv_prev,
+           row_number() over (partition by k.stock_no order by k.trade_date desc) as rn
+    from k_calc k
+    window w3 as (partition by k.stock_no order by k.trade_date rows between 2 preceding and current row)
+  ),
+  candidate as (
+    select t.stock_no, t.close, t.kv, t.dv, t.h8, t.l8,
+           1.5 * (t.kv + t.kv_prev) - t.rsv_val - t.rsv_prev as rsv_min
+    from kd t
+    where t.rn = 1 and t.wcnt >= 9
+      and t.kv <= t.dv          -- 今日尚未交叉
+      and t.kv < 30             -- 低檔蓄勢
+      and t.h8 > t.l8
+      and t.kv_prev is not null and t.rsv_prev is not null
+  ),
+  solved as (
+    -- 觸發價 = l8 + 門檻×(h8−l8)；高於 h8 時創新高（RSV=100）即交叉 → 取 h8；低於 0 取 0
+    select c.*, greatest(least(c.l8 + c.rsv_min / 100 * (c.h8 - c.l8), c.h8), 0) as trigger_price
+    from candidate c
+    where c.rsv_min <= 100      -- 門檻 >100 代表明日不可能交叉
+  )
+  select s2.stock_no, s.name, s2.close,
+         round(s2.kv::numeric, 1), round(s2.dv::numeric, 1),
+         round(s2.trigger_price::numeric, 2),
+         round(((s2.trigger_price - s2.close) / s2.close * 100)::numeric, 2)
+  from solved s2
+  left join stocks s on s.stock_no = s2.stock_no
+  where (s2.trigger_price - s2.close) / s2.close <= 0.03  -- 觸發價距今收 3% 內才有實戰意義
+    and (p_market is null or s.market = p_market)
+  order by (s2.trigger_price - s2.close) / s2.close asc
+  limit limit_n
+$$;
+
 -- 策略五：融資減、價格漲（最新交易日融資減少且股價上漲，散戶籌碼退場）
 create or replace function margin_reduce_price_up_picks(
   limit_n int default 5,
