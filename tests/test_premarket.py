@@ -31,7 +31,7 @@ def test_morning_open_push_merged_brief():
         assert "【隔夜國際市場】" in text
         assert "道瓊 53,055.91　🔺0.3%" in text
         assert "日經 225 68,256.96　🔽2.1%" in text
-        assert "韓國 KOSPI 7,656.31　🔽4.9%" in text
+        assert "KOSPI" not in text  # 韓股與台股連動低，已移除
         assert "【台股連動指標】" in text
         assert "台積電 ADR 451.79　🔺4.1%" in text
         assert "美元/台幣 32.000　🔺0.31%（台幣貶）" in text
@@ -49,7 +49,7 @@ def test_morning_open_push_merged_brief():
         # 白話解讀：總經＋試撮＋法人融資合併在同一段
         assert "【📖 白話解讀】" in text
         assert "美股科技股" in text
-        assert "日韓股市" in text
+        assert "日經" in text
         assert "台積電 ADR 漲 4.1% → 台積電今天大概率開高" in text
         assert "台幣明顯走貶 → 外資資金偏流出" in text
         assert "→ 總結：" in text
@@ -106,7 +106,7 @@ def test_morning_open_pushes_even_without_trial_price():
 
 
 def test_fetch_quote_flags_data_date():
-    """日韓指數的 is_today：最後一根有效日線是不是該市場的今天。"""
+    """亞股指數的 is_today：最後一根有效日線是不是該市場的今天。"""
     import asyncio
     import time
 

@@ -1,4 +1,4 @@
-"""盤前推播：08:00 總經快報（美日韓指數/ADR/匯率）、08:30 開盤導航（ADR 隱含價＋昨日台股）。"""
+"""盤前推播：盤前導航（美股/日經/ADR/匯率＋台股試撮＋昨日台股＋除權息）。"""
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -19,7 +19,6 @@ MACRO_INDICES = (
     ("那斯達克", "^IXIC"),
     ("費城半導體", "^SOX"),
     ("日經 225", "^N225"),
-    ("韓國 KOSPI", "^KS11"),
 )
 TSM_ADR_SYMBOL = "TSM"
 USDTWD_SYMBOL = "USDTWD=X"
@@ -156,18 +155,16 @@ def _interpret_macro(quotes: dict[str, dict | None], adr: dict | None, fx: dict 
         else:
             lines.append(f"・美股科技股持平（費半 {sign_of(pct)}{pct:.1f}%）→ 對台股影響中性")
 
-    asia_quotes = [q for q in (quotes.get("^N225"), quotes.get("^KS11")) if q]
-    asia = [q["pct"] for q in asia_quotes]
-    if asia:
-        avg = sum(asia) / len(asia)
-        # 資料全是昨收時明講，避免把昨天的行情當成今天的亞洲情緒
-        stale = bool(asia_quotes) and all(q.get("is_today") is False for q in asia_quotes)
-        subject = "日韓股市昨日" if stale else "日韓股市"
-        if avg <= -1.5:
-            lines.append(f"・{subject}同步走弱（平均 {avg:.1f}%）→ 亞洲整體風險情緒偏差")
+    nikkei = quotes.get("^N225")
+    if nikkei:
+        pct = nikkei["pct"]
+        # 資料是昨收時明講，避免把昨天的行情當成今天的亞洲情緒
+        subject = "日經昨日" if nikkei.get("is_today") is False else "日經"
+        if pct <= -1.5:
+            lines.append(f"・{subject}明顯走弱（{pct:.1f}%）→ 亞洲風險情緒偏差")
             score -= 1
-        elif avg >= 1.5:
-            lines.append(f"・{subject}同步走強（平均 +{avg:.1f}%）→ 亞洲情緒偏樂觀")
+        elif pct >= 1.5:
+            lines.append(f"・{subject}明顯走強（+{pct:.1f}%）→ 亞洲情緒偏樂觀")
             score += 1
         else:
             lines.append(f"・{subject}波動不大 → 亞洲情緒平穩")
@@ -209,14 +206,14 @@ async def _macro_section(http: httpx.AsyncClient) -> tuple[list[str], list[str]]
     lines = ["【隔夜國際市場】"]
     for label, symbol in MACRO_INDICES:
         line = _quote_line(label, quotes[symbol])
-        # 日韓與台北同步 8:00 開盤——標註資料時點避免把昨收當今日行情
-        if symbol in ("^N225", "^KS11") and quotes[symbol] is not None:
+        # 日經與台北同步 8:00 開盤——標註資料時點避免把昨收當今日行情
+        if symbol == "^N225" and quotes[symbol] is not None:
             if quotes[symbol].get("is_today") is True:
                 line += "（今日盤中）"
             elif quotes[symbol].get("is_today") is False:
                 line += "（昨收）"
         lines.append(line)
-    lines.append("＊美股為隔夜收盤；日韓 8:00（台北時間）開盤，行末標示資料時點")
+    lines.append("＊美股為隔夜收盤；日經 8:00（台北時間）開盤，行末標示資料時點")
     lines.append("")
     lines.append("【台股連動指標】")
     lines.append(_quote_line("台積電 ADR", adr))
