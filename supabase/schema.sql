@@ -280,6 +280,7 @@ language sql stable as $$
     select dc.stock_no, dc.trade_date, dc.close, dc.high, dc.low
     from daily_closes dc
     where dc.trade_date >= current_date - 40 and dc.high is not null and dc.low is not null
+      and dc.close > 0  -- 資料源偶有 0 價列，除以 close 前先擋掉
   ),
   rsv as (
     select b.stock_no, b.trade_date, b.close,
