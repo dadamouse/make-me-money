@@ -231,8 +231,8 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         state.backfill_task = asyncio.create_task(run())
         return state.backfill_status
 
-    async def _push_personal(request: Request, builder) -> int:
-        """對每位已綁定成員，各自產生內容並推播。"""
+    async def _push_personal(request: Request, builder, only_member: str | None = None) -> int:
+        """對每位已綁定成員，各自產生內容並推播；only_member 指定時只推該成員（手動重推用）。"""
         deps = request.app.state.deps
         bindings = await deps.db.get("line_bindings?select=line_user_id,member_id")
         pushed = 0
@@ -241,6 +241,8 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
                 continue
             members = await deps.db.get(f"members?id=eq.{binding['member_id']}&select=id,name")
             if not members:
+                continue
+            if only_member and members[0]["name"] != only_member:
                 continue
             text = await builder(deps, members[0])
             if not text:
@@ -300,20 +302,20 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         return {"ok": True, **result}
 
     @app.post("/admin/weekly-report")
-    async def weekly_report(request: Request) -> dict:
-        """週六早上：持股週報推播。"""
+    async def weekly_report(request: Request, member: str | None = None) -> dict:
+        """週六早上：持股週報推播。member 參數＝只重推指定成員。"""
         _check_cron_secret(request)
-        pushed = await _push_personal(request, build_weekly_report)
-        logger.info("持股週報完成 pushed=%s", pushed)
+        pushed = await _push_personal(request, build_weekly_report, only_member=member)
+        logger.info("持股週報完成 pushed=%s member=%s", pushed, member)
         return {"ok": True, "pushed": pushed}
 
     @app.post("/admin/weekly-outlook")
-    async def weekly_outlook(request: Request) -> dict:
-        """週日早上：下週展望推播＋觸發回補健檢。"""
+    async def weekly_outlook(request: Request, member: str | None = None) -> dict:
+        """週日早上：下週展望推播＋觸發回補健檢。member 參數＝只重推指定成員（不觸發回補）。"""
         _check_cron_secret(request)
-        pushed = await _push_personal(request, build_weekly_outlook)
-        backfill = await _start_backfill(request)
-        logger.info("下週展望完成 pushed=%s backfill=%s", pushed, backfill)
+        pushed = await _push_personal(request, build_weekly_outlook, only_member=member)
+        backfill = None if member else await _start_backfill(request)
+        logger.info("下週展望完成 pushed=%s member=%s backfill=%s", pushed, member, backfill)
         return {"ok": True, "pushed": pushed, "backfill": backfill}
 
     @app.get("/admin/backfill-history")

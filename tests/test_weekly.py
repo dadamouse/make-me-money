@@ -68,3 +68,22 @@ def test_weekly_report_skips_members_without_holdings():
         rt.send("登入dada")  # 綁定但沒有持股
         response = rt.client.post("/admin/weekly-report", headers={"x-cron-secret": "cron-secret"})
         assert response.json()["pushed"] == 0
+
+
+def test_weekly_report_member_filter_pushes_only_target():
+    """member 參數＝手動重推指定成員，其他綁定成員不會收到重複推播。"""
+    from test_bot import _seed_history
+    with BotRuntime() as rt:
+        rt.send("登入dada", line_user_id="U-dada")
+        rt.send("+2330 1000 850", line_user_id="U-dada")
+        rt.send("登入gino", line_user_id="U-gino")
+        rt.send("+0050 1000 100", line_user_id="U-gino")
+        _seed_history(rt, "2330")
+        _seed_history(rt, "0050")
+        pushes_before = len(rt.replies)
+        response = rt.client.post("/admin/weekly-report?member=dada", headers={"x-cron-secret": "cron-secret"})
+        assert response.status_code == 200
+        assert response.json()["pushed"] == 1
+        new_pushes = [r for r in rt.replies[pushes_before:] if "to" in r]
+        assert len(new_pushes) == 1
+        assert new_pushes[0]["to"] == "U-dada"
