@@ -15,6 +15,7 @@ from .flex import (
     build_picks_message,
     build_portfolio_message,
 )
+from .buy_check import build_buy_check_message
 from .health import build_health_report
 from .history import get_price_history, merge_realtime_bar, read_batch
 from .indicators import compute_indicators
@@ -202,6 +203,8 @@ async def _apply_pick(deps: Deps, line_user_id: str, member: dict, cmd: Command,
         return await _insert_holding(deps, member, stock, pending_item.get("shares"), pending_item.get("cost"))
     if pending_item["action"] == "chart":
         return await _render_chart_reply(deps, stock)
+    if pending_item["action"] == "buy_check":
+        return await _render_buy_check_reply(deps, stock)
     if pending_item["action"] == "signal":
         return await _render_signal_reply(deps, stock)
     return await _delete_holding(deps, member, stock, stock["stock_no"])
@@ -390,6 +393,30 @@ async def _handle_chart(deps: Deps, line_user_id: str, cmd: Command) -> str | di
     return await _render_chart_reply(deps, stock)
 
 
+async def _render_buy_check_reply(deps: Deps, stock: dict) -> str | dict:
+    """買進檢查：附線圖＋技術/籌碼/環境/訊號逐項詳解。"""
+    history = await get_price_history(deps.db, deps.twse, stock["stock_no"], stock.get("market"))
+    history = merge_realtime_bar(history, await deps.twse.fetch_realtime(stock["stock_no"], stock.get("market")))
+    if len(history) < 30:
+        return f"❌ {_stock_label(stock)} 歷史資料不足（需至少 30 個交易日），買進檢查暫時做不出來。"
+    institutional = await fetch_chart_institutional(deps, stock["stock_no"])
+    png = render_kline_png(history, f"{stock['stock_no']} {stock['name']}", institutional=institutional)
+    chart_id = deps.charts.put(png)
+    image_url = f"{deps.base_url}/charts/{chart_id}.png"
+    indicators = compute_indicators(history)
+    return await build_buy_check_message(deps, stock, history, image_url, indicators)
+
+
+async def _handle_buy_check(deps: Deps, line_user_id: str, cmd: Command) -> str | dict:
+    stock = await _resolve_stock(deps, cmd.stock)
+    if not stock:
+        return f"❌ 找不到「{cmd.stock}」。請確認名稱（公司簡稱），或直接輸入代號，例如：買2330"
+    if stock.get("candidates"):
+        deps.pending.put(line_user_id, {"action": "buy_check", "candidates": stock["candidates"]})
+        return _candidates_reply(cmd.stock, stock["candidates"])
+    return await _render_buy_check_reply(deps, stock)
+
+
 async def _render_signal_reply(deps: Deps, stock: dict) -> str:
     history = await get_price_history(deps.db, deps.twse, stock["stock_no"], stock.get("market"))
     history = merge_realtime_bar(history, await deps.twse.fetch_realtime(stock["stock_no"], stock.get("market")))
@@ -565,6 +592,8 @@ async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> 
         return await _handle_news(deps, member)
     if cmd.action == "chart":
         return await _handle_chart(deps, line_user_id, cmd)
+    if cmd.action == "buy_check":
+        return await _handle_buy_check(deps, line_user_id, cmd)
     if cmd.action == "signal":
         return await _handle_signal(deps, line_user_id, cmd)
     if cmd.action == "charts_all":
