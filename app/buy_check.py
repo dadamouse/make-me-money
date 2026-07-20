@@ -199,7 +199,7 @@ async def _sector_items(deps: Deps, stock: dict, mode: str) -> list[dict]:
                 )))
             else:
                 items.append(_item(None, f"・{fact}", "類股強弱居中：族群資金流向不明顯，回歸個股自身條件判斷。"))
-        peers = await deps.db.rpc("correlated_peers", {"p_stock_no": stock["stock_no"]})
+        peers = await deps.db.rpc("correlated_peers", {"p_stock_no": stock["stock_no"], "limit_n": 5})
         if peers:
             items.append(_item(None, "同業比較（近 5 日累計，點同業可直接檢查）", (
                 "同業由股價連動性自動配對（近半年日報酬相關性最高的同分類公司，如友達↔群創、"
