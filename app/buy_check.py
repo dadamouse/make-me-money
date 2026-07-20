@@ -320,7 +320,8 @@ def _verdict_lines(mode: str, favorable: int, risk: int, checks: list[dict], ind
 
 
 async def build_buy_check_message(
-    deps: Deps, stock: dict, history: list[dict], image_url: str, indicators: dict, mode: str = "buy"
+    deps: Deps, stock: dict, history: list[dict], image_url: str, indicators: dict, mode: str = "buy",
+    page_url: str | None = None,
 ) -> dict:
     """組買進/賣出檢查 Flex：hero 放線圖，body 依分區列出每一項＋詳細說明。
 
@@ -401,7 +402,10 @@ async def build_buy_check_message(
     bubble = {
         "type": "bubble",
         "size": "giga",
-        "hero": {"type": "image", "url": image_url, "size": "full", "aspectRatio": "13:10", "aspectMode": "fit"},
+        "hero": {
+            "type": "image", "url": image_url, "size": "full", "aspectRatio": "13:10", "aspectMode": "fit",
+            **({"action": {"type": "uri", "label": "開網頁版", "uri": page_url}} if page_url else {}),
+        },
         "body": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": body},
         "footer": {
             "type": "box",

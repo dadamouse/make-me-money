@@ -410,7 +410,10 @@ async def _render_buy_check_reply(deps: Deps, stock: dict, mode: str = "buy") ->
     chart_id = deps.charts.put(png)
     image_url = f"{deps.base_url}/charts/{chart_id}.png"
     indicators = compute_indicators(history)
-    return await build_buy_check_message(deps, stock, history, image_url, indicators, mode=mode)
+    return await build_buy_check_message(
+        deps, stock, history, image_url, indicators, mode=mode,
+        page_url=stock_web_url(deps, stock["stock_no"]),
+    )
 
 
 async def _handle_buy_check(deps: Deps, line_user_id: str, cmd: Command, mode: str = "buy") -> str | dict:

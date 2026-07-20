@@ -264,7 +264,11 @@ def build_chart_bubble(
     bubble = {
         "type": "bubble",
         "size": size,
-        "hero": {"type": "image", "url": image_url, "size": "full", "aspectRatio": CHART_ASPECT_RATIO, "aspectMode": "fit"},
+        "hero": {
+            "type": "image", "url": image_url, "size": "full", "aspectRatio": CHART_ASPECT_RATIO, "aspectMode": "fit",
+            # 點圖直接開個股網頁（放大看圖＋完整資料）
+            **({"action": {"type": "uri", "label": "開網頁版", "uri": page_url}} if page_url else {}),
+        },
         "body": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": body_rows},
     }
     if page_url:

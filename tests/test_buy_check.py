@@ -120,3 +120,18 @@ def test_buy_check_sector_momentum_and_peers():
         assert "同業比較（近 5 日累計，點同業可直接檢查）" in content
         assert "› 聯發科 +6.2%（連動 0.72）" in content
         assert '"text": "買2454"' in content  # 點同業 → 自動送出買進檢查
+
+
+def test_hero_chart_opens_web_page():
+    """技術分析圖（hero）要可以點進網頁：圖卡與買賣檢查卡都要有 uri action。"""
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        _seed_history(rt, "2330")
+        rt.send("圖2330")
+        hero = rt.last_message()["contents"]["hero"]
+        assert hero["action"]["type"] == "uri"
+        assert "/s/2330?sig=" in hero["action"]["uri"]
+        rt.send("買2330")
+        hero = rt.last_message()["contents"]["hero"]
+        assert hero["action"]["type"] == "uri"
+        assert "/s/2330?sig=" in hero["action"]["uri"]
