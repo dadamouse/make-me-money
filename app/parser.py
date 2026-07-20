@@ -20,6 +20,7 @@ HELP_TEXT = "\n".join(
         "▸ -2330｜刪除持股",
         "▸ 圖2330｜技術分析圖",
         "▸ 買2330／賣2330｜買賣前總檢查（附圖＋逐項解說）",
+        "▸ 新聞2330｜個股新聞（最多 10 則）",
         "▸ 訊號2330｜支撐跌破法買賣訊號",
         "▸ 清空持股｜需再回覆「確認」",
         "",
@@ -67,6 +68,8 @@ def parse_command(raw_text: str | None) -> Command:
         return Command(action="list")
     if re.fullmatch(r"今日資訊|重大訊息|新聞", text):
         return Command(action="news")
+    if m := re.fullmatch(r"新聞\s*(\S+)", text):
+        return Command(action="stock_news", stock=m.group(1))
     if re.fullmatch(r"詳細持股|持股線圖|持股圖|我的線圖", text):
         return Command(action="charts_all")
     if m := re.fullmatch(r"(?:線圖|[Kk]線|圖)\s*(\S+)", text):

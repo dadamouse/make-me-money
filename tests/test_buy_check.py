@@ -72,3 +72,35 @@ def test_parse_revenue_mix():
     html = """<table><tr><td>營收比重</td><td>晶圓-5奈米30.98%、晶圓-3奈米20.85% (2025年)</td></tr></table>"""
     assert parse_revenue_mix(html) == "晶圓-5奈米30.98%、晶圓-3奈米20.85% (2025年)"
     assert parse_revenue_mix("<table><tr><td>其他</td></tr></table>") is None
+
+
+def test_stock_news_titles_and_links_only_max_10():
+    """新聞2330：只給標題和連結、最多 10 則（來源 RSS 有 12 則）。"""
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("新聞2330")
+        reply = rt.last_reply()
+        assert "📰 台積電（2330）相關新聞" in reply
+        assert "新聞標題1" in reply and "新聞標題10" in reply
+        assert "新聞標題11" not in reply  # 上限 10
+        assert "https://news.google.com/a1" in reply
+        assert "來源1" not in reply  # 只要標題和連結，不放來源/日期
+
+
+def test_buy_check_card_has_news_button():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        _seed_history(rt, "2330")
+        rt.send("買2330")
+        content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
+        assert '"text": "新聞2330"' in content  # 📰 按鈕自動送出新聞指令
+
+
+def test_bare_news_keyword_still_menu3():
+    """單獨打「新聞」仍是選單 3 的持股今日資訊，不是個股新聞。"""
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("新聞")
+        reply = rt.last_reply()
+        assert "相關新聞" not in reply  # 不是個股新聞格式
+        assert "沒有任何持股" in reply  # 走選單 3 的持股訊息流程（測試帳號無持股）

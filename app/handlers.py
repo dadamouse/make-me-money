@@ -20,6 +20,7 @@ from .health import build_health_report
 from .history import get_price_history, merge_realtime_bar, read_batch
 from .indicators import compute_indicators
 from .market_health import build_market_health_message
+from .news import fetch_stock_news, format_stock_news
 from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number, parse_command
 from .screener import format_picks_message, run_daily_picks
 from .support_break import evaluate_signals, format_signal_report, signal_summary_line
@@ -207,6 +208,8 @@ async def _apply_pick(deps: Deps, line_user_id: str, member: dict, cmd: Command,
         return await _render_buy_check_reply(deps, stock, mode="buy")
     if pending_item["action"] == "sell_check":
         return await _render_buy_check_reply(deps, stock, mode="sell")
+    if pending_item["action"] == "stock_news":
+        return await _render_stock_news_reply(deps, stock)
     if pending_item["action"] == "signal":
         return await _render_signal_reply(deps, stock)
     return await _delete_holding(deps, member, stock, stock["stock_no"])
@@ -421,6 +424,21 @@ async def _handle_buy_check(deps: Deps, line_user_id: str, cmd: Command, mode: s
     return await _render_buy_check_reply(deps, stock, mode=mode)
 
 
+async def _render_stock_news_reply(deps: Deps, stock: dict) -> str:
+    items = await fetch_stock_news(deps.http, stock["name"])
+    return format_stock_news(stock, items)
+
+
+async def _handle_stock_news(deps: Deps, line_user_id: str, cmd: Command) -> str:
+    stock = await _resolve_stock(deps, cmd.stock)
+    if not stock:
+        return f"❌ 找不到「{cmd.stock}」。請確認名稱（公司簡稱），或直接輸入代號，例如：新聞2330"
+    if stock.get("candidates"):
+        deps.pending.put(line_user_id, {"action": "stock_news", "candidates": stock["candidates"]})
+        return _candidates_reply(cmd.stock, stock["candidates"])
+    return await _render_stock_news_reply(deps, stock)
+
+
 async def _render_signal_reply(deps: Deps, stock: dict) -> str:
     history = await get_price_history(deps.db, deps.twse, stock["stock_no"], stock.get("market"))
     history = merge_realtime_bar(history, await deps.twse.fetch_realtime(stock["stock_no"], stock.get("market")))
@@ -600,6 +618,8 @@ async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> 
         return await _handle_buy_check(deps, line_user_id, cmd, mode="buy")
     if cmd.action == "sell_check":
         return await _handle_buy_check(deps, line_user_id, cmd, mode="sell")
+    if cmd.action == "stock_news":
+        return await _handle_stock_news(deps, line_user_id, cmd)
     if cmd.action == "signal":
         return await _handle_signal(deps, line_user_id, cmd)
     if cmd.action == "charts_all":

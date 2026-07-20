@@ -190,6 +190,15 @@ TWSE_OK = {
     "data": [["115/07/02", "1,000", "2,355,000", "2,350.00", "2,360.00", "2,340.00", "2,355.00", "+5.00", "100"]],
 }
 
+GOOGLE_NEWS_RSS = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+""" + "\n".join(
+    f"<item><title>新聞標題{i}</title><link>https://news.google.com/a{i}</link>"
+    f"<pubDate>Mon, 20 Jul 2026 01:00:00 GMT</pubDate><source url='https://x'>來源{i}</source></item>"
+    for i in range(1, 13)
+) + """
+</channel></rss>"""
+
 
 class FakePostgrest:
     """記憶體版 PostgREST：支援本專案用到的 eq / in / on_conflict 語法。"""
@@ -330,6 +339,8 @@ class BotRuntime:
                 return httpx.Response(200, json={"rtcode": "0000", "msgArray": msgs})
             if url.startswith("https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule"):
                 return httpx.Response(200, json=self.holiday_fixture)
+            if url.startswith("https://news.google.com/rss/search"):
+                return httpx.Response(200, text=GOOGLE_NEWS_RSS)
             if url.startswith("https://www.twse.com.tw/rwd/zh/fund/T86"):
                 return httpx.Response(200, json=LISTED_INSTITUTIONAL)
             if url.startswith("https://www.twse.com.tw/"):

@@ -353,5 +353,13 @@ async def build_buy_check_message(
         "size": "giga",
         "hero": {"type": "image", "url": image_url, "size": "full", "aspectRatio": "13:10", "aspectMode": "fit"},
         "body": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": body},
+        "footer": {
+            "type": "box",
+            "layout": "horizontal",
+            "contents": [{
+                "type": "button", "style": "primary", "height": "sm", "color": "#455A64",
+                "action": {"type": "message", "label": "📰 相關新聞", "text": f"新聞{stock_no}"},
+            }],
+        },
     }
     return {"type": "flex", "altText": "\n".join(alt_lines)[:400], "contents": bubble}
