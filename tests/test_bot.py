@@ -1099,3 +1099,21 @@ def test_market_health_keeps_snapshot_when_mis_stale():
         message = rt.last_message()
         assert "📋 大盤體檢（07/07）" in message["altText"]
         assert "加權指數 45,479.11（-2.3%）" in message["altText"]
+
+
+def test_login_name_is_case_insensitive():
+    """「登入rita」要對到既有的「Rita」，不再長出重複成員（曾因此漏收週末推播）。"""
+    with BotRuntime() as rt:
+        rt.send("登入Rita", line_user_id="U-rita")
+        rt.send("登入rita", line_user_id="U-other")
+        assert "已登入「Rita」" in rt.last_reply()
+        names = [m["name"] for m in rt.postgrest.db["members"]]
+        assert names.count("Rita") == 1 and "rita" not in names
+
+
+def test_switch_name_is_case_insensitive():
+    with BotRuntime() as rt:
+        rt.send("登入Rita", line_user_id="U-rita")
+        rt.send("登入dada", line_user_id="U-dada")
+        rt.send("切換RITA", line_user_id="U-dada")
+        assert "已切換為「Rita」" in rt.last_reply()

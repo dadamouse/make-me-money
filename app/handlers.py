@@ -46,7 +46,8 @@ def _now_iso() -> str:
 
 
 async def _get_member_by_name(deps: Deps, name: str) -> dict | None:
-    rows = await deps.db.get(f"members?name=eq.{quote(name)}&select=id,name")
+    """名稱不分大小寫（ilike）：「登入rita」要對到既有的「Rita」，避免長出重複成員。"""
+    rows = await deps.db.get(f"members?name=ilike.{quote(name)}&select=id,name")
     return rows[0] if rows else None
 
 
