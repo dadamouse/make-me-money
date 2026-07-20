@@ -175,6 +175,43 @@ def _bollinger_item(indicators: dict) -> dict | None:
     ))
 
 
+async def _sector_items(deps: Deps, stock: dict) -> list[dict]:
+    """類股輪動：所屬類股近 5 日強弱排名（加減分）＋同類股領頭羊（比價參考）。"""
+    industry = stock.get("industry")
+    if not industry:
+        return []
+    items = []
+    try:
+        ranks = await deps.db.rpc("sector_momentum_rank", {"p_industry": industry})
+        if ranks:
+            row = ranks[0]
+            rank, total, median = int(row["rank"]), int(row["total"]), float(row["median_pct"])
+            fact = f"類股動能：{industry}近 5 日中位數 {sign_of(median)}{median:.1f}%（{total} 類中第 {rank} 名）"
+            if rank <= max(total // 3, 1):
+                items.append(_item(True, f"✅ {fact}", (
+                    "台股有明顯的類股輪動：資金集中攻擊強勢族群時，同類股會互相拉抬——"
+                    "買在強勢類股裡的個股，順風比逆風多，行情的持續性通常也較好。"
+                )))
+            elif rank > total * 2 // 3:
+                items.append(_item(False, f"⚠️ {fact}", (
+                    "所屬類股整體弱勢：資金不在這個族群時，個股題材再好也常獨木難撐；"
+                    "想買可以等類股翻強（排名爬回前段）再動作，勝率較好。"
+                )))
+            else:
+                items.append(_item(None, f"・{fact}", "類股強弱居中：族群資金流向不明顯，回歸個股自身條件判斷。"))
+        peers = await deps.db.rpc("sector_top_stocks", {"p_industry": industry})
+        peers = [p for p in peers if str(p["stock_no"]) != stock["stock_no"]][:3]
+        if peers:
+            text = "、".join(f"{p['stock_name']} {sign_of(float(p['pct']))}{float(p['pct']):.1f}%" for p in peers)
+            items.append(_item(None, f"同類股領頭（近 5 日）：{text}", (
+                "同類股比價：領頭羊反映族群的資金方向。個股若遠落後同業是相對弱勢警訊，"
+                "若領先族群則常是主流指標股——輸入「買 代號」可以直接檢查這幾檔。"
+            )))
+    except Exception:
+        logger.warning("類股動能取得失敗 industry=%s", industry, exc_info=True)
+    return items
+
+
 async def _market_env_items(deps: Deps) -> list[dict]:
     """大盤位置與 VIX——個股再好，環境逆風時勝率整體變差。"""
     from .market_health import _index_series_with_realtime
@@ -304,12 +341,15 @@ async def build_buy_check_message(
     except Exception:
         logger.warning("買賣檢查：籌碼資料取得失敗 stock_no=%s", stock_no, exc_info=True)
     boll = _bollinger_item(indicators)
+    sector = await _sector_items(deps, stock)
     env = await _market_env_items(deps)
     side = "buy" if mode == "buy" else "sell"
     signals = _signal_items(evaluate_signals(history, stock.get("market")), side)
     fired_sell = sum(1 for s in signals if s["ok"] is False)
 
-    graded = checks + chips + ([boll] if boll else []) + env
+    graded_sector = [i for i in sector if i["ok"] is not None]  # 強/弱類股計入加減分
+    neutral_sector = [i for i in sector if i["ok"] is None]      # 中性排名與同類股比價僅供參考
+    graded = checks + chips + ([boll] if boll else []) + graded_sector + env
     favorable = [c for c in graded if c["ok"] is True]
     risks = [c for c in graded if c["ok"] is False]
 
@@ -341,6 +381,7 @@ async def build_buy_check_message(
     body += _section("🏢 這家公司做什麼", await _company_profile_items(deps, stock))
     body += _section(section_titles[0], favorable)
     body += _section(section_titles[1], risks)
+    body += _section("🔄 類股參考", neutral_sector)
     body += _section(section_titles[2], signals)
     body.append({"type": "separator", "margin": "lg"})
     for line in _verdict_lines(mode, len(favorable), len(risks), graded, indicators, fired_sell):

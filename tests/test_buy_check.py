@@ -106,3 +106,15 @@ def test_bare_news_keyword_still_menu3():
         reply = rt.last_reply()
         assert "相關新聞" not in reply  # 不是個股新聞格式
         assert "沒有任何持股" in reply  # 走選單 3 的持股訊息流程（測試帳號無持股）
+
+
+def test_buy_check_sector_momentum_and_peers():
+    """類股輪動：強勢類股列有利＋同類股領頭羊 reference（排除自己）。"""
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        _seed_history(rt, "2330")
+        rt.send("買2330")
+        content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
+        assert "類股動能" in content
+        assert "34 類中第 2 名" in content
+        assert "同類股領頭（近 5 日）：聯發科 +6.2%、日月光投控 +3.9%" in content  # 排除 2330 自己

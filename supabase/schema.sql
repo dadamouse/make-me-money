@@ -557,3 +557,60 @@ create table if not exists daily_broker_flows (
   created_at timestamptz not null default now(),
   primary key (stock_no, trade_date)
 );
+
+-- 類股動能：指定產業近 N 日中位數漲跌與全市場排名（買/賣檢查的類股輪動項）
+create or replace function sector_momentum_rank(p_industry text, days int default 5)
+returns table (industry text, median_pct numeric, rank int, total int)
+language sql stable as $$
+  with latest as (select max(trade_date) as d from daily_closes),
+  base_date as (
+    select distinct trade_date from daily_closes
+    order by trade_date desc offset days limit 1
+  ),
+  perf as (
+    select s.industry, dc.stock_no,
+           (max(dc.close) filter (where dc.trade_date = (select d from latest)) /
+            nullif(max(dc.close) filter (where dc.trade_date = (select trade_date from base_date)), 0) - 1) * 100 as pct
+    from daily_closes dc join stocks s on s.stock_no = dc.stock_no
+    where s.industry is not null and dc.close > 0
+      and dc.trade_date in ((select d from latest), (select trade_date from base_date))
+    group by s.industry, dc.stock_no
+  ),
+  medians as (
+    select p.industry, percentile_cont(0.5) within group (order by p.pct) as med
+    from perf p where p.pct is not null
+    group by p.industry having count(*) >= 5
+  ),
+  ranked as (
+    select m.industry, m.med, rank() over (order by m.med desc) as rk, count(*) over () as total
+    from medians m
+  )
+  select r.industry, round(r.med::numeric, 2), r.rk::int, r.total::int
+  from ranked r where r.industry = p_industry
+$$;
+
+-- 同類股領頭羊：同產業近 N 日漲幅前幾名（有量門檻，避免冷門股）
+create or replace function sector_top_stocks(p_industry text, days int default 5, limit_n int default 3)
+returns table (stock_no text, stock_name text, pct numeric)
+language sql stable as $$
+  with latest as (select max(trade_date) as d from daily_closes),
+  base_date as (
+    select distinct trade_date from daily_closes
+    order by trade_date desc offset days limit 1
+  ),
+  perf as (
+    select s.stock_no, s.name,
+           (max(dc.close) filter (where dc.trade_date = (select d from latest)) /
+            nullif(max(dc.close) filter (where dc.trade_date = (select trade_date from base_date)), 0) - 1) * 100 as pct,
+           max(dc.volume) filter (where dc.trade_date = (select d from latest)) as vol
+    from daily_closes dc join stocks s on s.stock_no = dc.stock_no
+    where s.industry = p_industry and dc.close > 0
+      and dc.trade_date in ((select d from latest), (select trade_date from base_date))
+    group by s.stock_no, s.name
+  )
+  select p.stock_no, p.name, round(p.pct::numeric, 1)
+  from perf p
+  where p.pct is not null and coalesce(p.vol, 0) >= 500000  -- 至少 500 張
+  order by p.pct desc
+  limit limit_n
+$$;

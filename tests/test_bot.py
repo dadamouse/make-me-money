@@ -170,6 +170,12 @@ RPC_FIXTURES = {
         {"stock_no": "2466", "stock_name": "冠西電", "close": 94.8, "base_close": 59.0, "gain_pct": 60.7},
     ],
     "holders_depth": [{"weeks": 2}],
+    "sector_momentum_rank": [{"industry": "半導體", "median_pct": 3.2, "rank": 2, "total": 34}],
+    "sector_top_stocks": [
+        {"stock_no": "2454", "stock_name": "聯發科", "pct": 6.2},
+        {"stock_no": "2330", "stock_name": "台積電", "pct": 4.1},
+        {"stock_no": "3711", "stock_name": "日月光投控", "pct": 3.9},
+    ],
     "concentration_picks": [
         {"stock_no": "8033", "stock_name": "雷虎", "big_ratio": 45.2, "ratio_change": 1.2, "holders_change_pct": -2.3},
     ],
