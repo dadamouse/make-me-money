@@ -74,17 +74,19 @@ def test_parse_revenue_mix():
     assert parse_revenue_mix("<table><tr><td>其他</td></tr></table>") is None
 
 
-def test_stock_news_titles_and_links_only_max_10():
-    """新聞2330：只給標題和連結、最多 10 則（來源 RSS 有 12 則）。"""
+def test_stock_news_flex_titles_as_buttons_max_10():
+    """新聞2330：Flex 卡、標題可點開連結、網址不露出、最多 10 則（來源 RSS 有 12 則）。"""
     with BotRuntime() as rt:
         rt.send("登入dada")
         rt.send("新聞2330")
-        reply = rt.last_reply()
-        assert "📰 台積電（2330）相關新聞" in reply
-        assert "新聞標題1" in reply and "新聞標題10" in reply
-        assert "新聞標題11" not in reply  # 上限 10
-        assert "https://news.google.com/a1" in reply
-        assert "來源1" not in reply  # 只要標題和連結，不放來源/日期
+        message = rt.last_message()
+        assert message["type"] == "flex"
+        content = json.dumps(message["contents"], ensure_ascii=False)
+        assert "📰 台積電（2330）相關新聞" in content
+        assert "新聞標題1" in content and "新聞標題10" in content
+        assert "新聞標題11" not in content  # 上限 10
+        assert '"uri": "https://news.google.com/a1"' in content  # 連結藏在動作裡
+        assert '"text": "https://' not in content  # 不把網址印出來
 
 
 def test_buy_check_card_has_news_button():

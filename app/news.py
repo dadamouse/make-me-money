@@ -46,14 +46,28 @@ async def fetch_stock_news(http: httpx.AsyncClient, query: str, limit: int = MAX
     return items
 
 
-def format_stock_news(stock: dict, items: list[dict]) -> str:
-    """新聞清單 → LINE 文字：只放標題與連結，保持乾淨。"""
+def build_stock_news_message(stock: dict, items: list[dict]) -> str | dict:
+    """新聞清單 → Flex：每則是可點的標題（開原文連結），不露出網址。"""
     if not items:
         return f"📰 {stock['name']}（{stock['stock_no']}）暫時找不到相關新聞。"
-    lines = [f"📰 {stock['name']}（{stock['stock_no']}）相關新聞"]
+    rows = []
     for i, item in enumerate(items, start=1):
         title = item["title"] if len(item["title"]) <= _TITLE_MAX else item["title"][:_TITLE_MAX] + "…"
-        lines.append(f"{i}. {title}")
+        row = {"type": "text", "text": f"{i}. {title}", "size": "sm", "color": "#1565C0",
+               "wrap": True, "margin": "md"}
         if item["link"]:
-            lines.append(item["link"])
-    return "\n".join(lines)
+            row["action"] = {"type": "uri", "label": "開啟", "uri": item["link"]}
+        rows.append(row)
+    rows.append({"type": "text", "text": "點標題開原文", "size": "xxs", "color": "#9E9E9E", "margin": "lg"})
+    bubble = {
+        "type": "bubble",
+        "size": "giga",
+        "header": {
+            "type": "box", "layout": "vertical", "backgroundColor": "#263238", "paddingAll": "14px",
+            "contents": [{"type": "text", "text": f"📰 {stock['name']}（{stock['stock_no']}）相關新聞",
+                          "size": "md", "weight": "bold", "color": "#FFFFFF"}],
+        },
+        "body": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": rows},
+    }
+    alt = "\n".join([f"📰 {stock['name']} 相關新聞"] + [item["title"][:40] for item in items[:5]])
+    return {"type": "flex", "altText": alt[:400], "contents": bubble}

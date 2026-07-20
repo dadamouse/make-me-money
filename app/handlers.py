@@ -20,7 +20,7 @@ from .health import build_health_report
 from .history import get_price_history, merge_realtime_bar, read_batch
 from .indicators import compute_indicators
 from .market_health import build_market_health_message
-from .news import fetch_stock_news, format_stock_news
+from .news import build_stock_news_message, fetch_stock_news
 from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number, parse_command
 from .screener import format_picks_message, run_daily_picks
 from .support_break import evaluate_signals, format_signal_report, signal_summary_line
@@ -424,12 +424,12 @@ async def _handle_buy_check(deps: Deps, line_user_id: str, cmd: Command, mode: s
     return await _render_buy_check_reply(deps, stock, mode=mode)
 
 
-async def _render_stock_news_reply(deps: Deps, stock: dict) -> str:
+async def _render_stock_news_reply(deps: Deps, stock: dict) -> str | dict:
     items = await fetch_stock_news(deps.http, stock["name"])
-    return format_stock_news(stock, items)
+    return build_stock_news_message(stock, items)
 
 
-async def _handle_stock_news(deps: Deps, line_user_id: str, cmd: Command) -> str:
+async def _handle_stock_news(deps: Deps, line_user_id: str, cmd: Command) -> str | dict:
     stock = await _resolve_stock(deps, cmd.stock)
     if not stock:
         return f"❌ 找不到「{cmd.stock}」。請確認名稱（公司簡稱），或直接輸入代號，例如：新聞2330"
