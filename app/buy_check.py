@@ -199,13 +199,13 @@ async def _sector_items(deps: Deps, stock: dict) -> list[dict]:
                 )))
             else:
                 items.append(_item(None, f"・{fact}", "類股強弱居中：族群資金流向不明顯，回歸個股自身條件判斷。"))
-        peers = await deps.db.rpc("sector_top_stocks", {"p_industry": industry})
-        peers = [p for p in peers if str(p["stock_no"]) != stock["stock_no"]][:3]
+        peers = await deps.db.rpc("correlated_peers", {"p_stock_no": stock["stock_no"]})
         if peers:
             text = "、".join(f"{p['stock_name']} {sign_of(float(p['pct']))}{float(p['pct']):.1f}%" for p in peers)
-            items.append(_item(None, f"同類股領頭（近 5 日）：{text}", (
-                "同類股比價：領頭羊反映族群的資金方向。個股若遠落後同業是相對弱勢警訊，"
-                "若領先族群則常是主流指標股——輸入「買 代號」可以直接檢查這幾檔。"
+            items.append(_item(None, f"同業比較（近 5 日累計）：{text}", (
+                "同業由股價連動性自動配對（近半年日報酬相關性最高的同分類公司，如友達↔群創、"
+                "中興電↔華城士電），每日自動更新。同業齊漲是產業行情、持續性較好；"
+                "只有自己動就要小心是單一題材。輸入「買 代號」可直接檢查這幾檔。"
             )))
     except Exception:
         logger.warning("類股動能取得失敗 industry=%s", industry, exc_info=True)

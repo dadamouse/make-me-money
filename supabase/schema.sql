@@ -614,3 +614,48 @@ language sql stable as $$
   order by p.pct desc
   limit limit_n
 $$;
+
+-- 同業自動配對：近 corr_days 日日報酬相關性最高的同分類個股（附近 perf_days 日累計漲跌）
+-- 同一景氣循環的公司股價自然同步（面板雙虎 corr>0.7、重電族群 >0.74，經實測驗證），
+-- 每日快照進來即自動更新，不需維護白名單；量能門檻擋冷門股，限同大分類擋 ETF 雜訊。
+create or replace function correlated_peers(
+  p_stock_no text, corr_window int default 130, perf_days int default 5, limit_n int default 3,
+  min_volume numeric default 500000, min_overlap int default 40
+)
+returns table (stock_no text, stock_name text, correlation numeric, pct numeric)
+language sql stable as $$
+  with returns as (
+    select dc.stock_no, dc.trade_date,
+           dc.close / nullif(lag(dc.close) over (partition by dc.stock_no order by dc.trade_date), 0) - 1 as ret
+    from daily_closes dc
+    where dc.trade_date >= current_date - corr_window and dc.close > 0
+  ),
+  target as (select trade_date, ret from returns where returns.stock_no = p_stock_no and ret is not null),
+  latest as (select max(trade_date) as d from daily_closes),
+  base_date as (
+    select distinct trade_date from daily_closes order by trade_date desc offset perf_days limit 1
+  ),
+  corr_calc as (
+    select r.stock_no, corr(r.ret, t.ret) as c
+    from returns r join target t on t.trade_date = r.trade_date
+    where r.stock_no <> p_stock_no and r.ret is not null
+    group by r.stock_no having count(*) >= min_overlap
+  ),
+  perf as (
+    select dc.stock_no,
+           (max(dc.close) filter (where dc.trade_date = (select d from latest)) /
+            nullif(max(dc.close) filter (where dc.trade_date = (select trade_date from base_date)), 0) - 1) * 100 as pct,
+           max(dc.volume) filter (where dc.trade_date = (select d from latest)) as vol
+    from daily_closes dc
+    where dc.trade_date in ((select d from latest), (select trade_date from base_date))
+    group by dc.stock_no
+  )
+  select cc.stock_no, s.name, round(cc.c::numeric, 2), round(p.pct::numeric, 1)
+  from corr_calc cc
+  join stocks s on s.stock_no = cc.stock_no
+  join perf p on p.stock_no = cc.stock_no
+  where s.industry = (select industry from stocks where stocks.stock_no = p_stock_no)
+    and coalesce(p.vol, 0) >= min_volume and p.pct is not null
+  order by cc.c desc
+  limit limit_n
+$$;

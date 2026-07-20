@@ -109,7 +109,7 @@ def test_bare_news_keyword_still_menu3():
 
 
 def test_buy_check_sector_momentum_and_peers():
-    """類股輪動：強勢類股列有利＋同類股領頭羊 reference（排除自己）。"""
+    """類股輪動：強勢類股列有利＋相關性自動配對的同業 reference。"""
     with BotRuntime() as rt:
         rt.send("登入dada")
         _seed_history(rt, "2330")
@@ -117,4 +117,4 @@ def test_buy_check_sector_momentum_and_peers():
         content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
         assert "類股動能" in content
         assert "34 類中第 2 名" in content
-        assert "同類股領頭（近 5 日）：聯發科 +6.2%、日月光投控 +3.9%" in content  # 排除 2330 自己
+        assert "同業比較（近 5 日累計）：聯發科 +6.2%、日月光投控 +3.9%" in content  # 相關性自動配對
