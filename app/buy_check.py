@@ -201,7 +201,10 @@ async def _sector_items(deps: Deps, stock: dict) -> list[dict]:
                 items.append(_item(None, f"・{fact}", "類股強弱居中：族群資金流向不明顯，回歸個股自身條件判斷。"))
         peers = await deps.db.rpc("correlated_peers", {"p_stock_no": stock["stock_no"]})
         if peers:
-            text = "、".join(f"{p['stock_name']} {sign_of(float(p['pct']))}{float(p['pct']):.1f}%" for p in peers)
+            text = "、".join(
+                f"{p['stock_name']} {sign_of(float(p['pct']))}{float(p['pct']):.1f}%（連動 {float(p['correlation']):.2f}）"
+                for p in peers
+            )
             items.append(_item(None, f"同業比較（近 5 日累計）：{text}", (
                 "同業由股價連動性自動配對（近半年日報酬相關性最高的同分類公司，如友達↔群創、"
                 "中興電↔華城士電），每日自動更新。同業齊漲是產業行情、持續性較好；"
