@@ -1,0 +1,26 @@
+supabase/schema.sql
+  s_7e7fe61c7f8490::t_5fa30c2036711a 617,626,635,643-644,646-647,652,660-661
+  s_7e7fe61c7f8490::t_c89428dfa3d3f7 618-625,627-634,636-642,645,648-651,653-659
+tests/test_buy_check.py
+  s_7e7fe61c7f8490::t_516ebc5fa5bf58 112,120
+tests/test_bot.py
+  s_7e7fe61c7f8490::t_516ebc5fa5bf58 174-176
+app/buy_check.py
+  s_7e7fe61c7f8490::t_428450056eb7b6 202,205-208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "d123f88e690a4c4b8b1ac2ad2f57a03e72815dd7",
+  "prompts": {},
+  "sessions": {
+    "s_7e7fe61c7f8490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59fc179f-d8b1-4c7e-9d5c-32a2b7e046cc",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
