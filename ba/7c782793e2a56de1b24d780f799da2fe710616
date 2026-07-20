@@ -1,0 +1,19 @@
+app/buy_check.py
+  s_7e7fe61c7f8490::t_6ee81fb2b00c15 202
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "ba7c782793e2a56de1b24d780f799da2fe710616",
+  "prompts": {},
+  "sessions": {
+    "s_7e7fe61c7f8490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59fc179f-d8b1-4c7e-9d5c-32a2b7e046cc",
+        "model": "unknown"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
