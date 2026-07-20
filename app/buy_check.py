@@ -75,9 +75,9 @@ async def _company_profile_items(deps: Deps, stock: dict) -> list[dict]:
     return items
 
 
-def _item(ok: bool | None, text: str, why: str) -> dict:
-    """ok=True 有利、False 風險、None 中性參考。"""
-    return {"ok": ok, "text": text, "why": why}
+def _item(ok: bool | None, text: str, why: str, action: dict | None = None) -> dict:
+    """ok=True 有利、False 風險、None 中性參考；action 讓該行可點（如同業連鎖檢查）。"""
+    return {"ok": ok, "text": text, "why": why, "action": action}
 
 
 def _institutional_item(rows: list[dict]) -> dict | None:
@@ -175,8 +175,8 @@ def _bollinger_item(indicators: dict) -> dict | None:
     ))
 
 
-async def _sector_items(deps: Deps, stock: dict) -> list[dict]:
-    """類股輪動：所屬類股近 5 日強弱排名（加減分）＋同類股領頭羊（比價參考）。"""
+async def _sector_items(deps: Deps, stock: dict, mode: str) -> list[dict]:
+    """類股輪動：所屬類股近 5 日強弱排名（加減分）＋相關性同業（可點擊連鎖檢查）。"""
     industry = stock.get("industry")
     if not industry:
         return []
@@ -201,15 +201,17 @@ async def _sector_items(deps: Deps, stock: dict) -> list[dict]:
                 items.append(_item(None, f"・{fact}", "類股強弱居中：族群資金流向不明顯，回歸個股自身條件判斷。"))
         peers = await deps.db.rpc("correlated_peers", {"p_stock_no": stock["stock_no"]})
         if peers:
-            text = "、".join(
-                f"{p['stock_name']} {sign_of(float(p['pct']))}{float(p['pct']):.1f}%（連動 {float(p['correlation']):.2f}）"
-                for p in peers
-            )
-            items.append(_item(None, f"同業比較（近 5 日累計）：{text}", (
+            items.append(_item(None, "同業比較（近 5 日累計，點同業可直接檢查）", (
                 "同業由股價連動性自動配對（近半年日報酬相關性最高的同分類公司，如友達↔群創、"
                 "中興電↔華城士電），每日自動更新。同業齊漲是產業行情、持續性較好；"
-                "只有自己動就要小心是單一題材。輸入「買 代號」可直接檢查這幾檔。"
+                "只有自己動就要小心是單一題材。"
             )))
+            command = "買" if mode == "buy" else "賣"
+            for p in peers:
+                label = f"› {p['stock_name']} {sign_of(float(p['pct']))}{float(p['pct']):.1f}%（連動 {float(p['correlation']):.2f}）"
+                items.append(_item(None, label, "", action={
+                    "type": "message", "label": str(p["stock_name"])[:20], "text": f"{command}{p['stock_no']}",
+                }))
     except Exception:
         logger.warning("類股動能取得失敗 industry=%s", industry, exc_info=True)
     return items
@@ -344,7 +346,7 @@ async def build_buy_check_message(
     except Exception:
         logger.warning("買賣檢查：籌碼資料取得失敗 stock_no=%s", stock_no, exc_info=True)
     boll = _bollinger_item(indicators)
-    sector = await _sector_items(deps, stock)
+    sector = await _sector_items(deps, stock, mode)
     env = await _market_env_items(deps)
     side = "buy" if mode == "buy" else "sell"
     signals = _signal_items(evaluate_signals(history, stock.get("market")), side)
@@ -357,8 +359,12 @@ async def build_buy_check_message(
     risks = [c for c in graded if c["ok"] is False]
 
     def _entry(item: dict) -> list[dict]:
-        rows = [{"type": "text", "text": item["text"], "size": "xs", "color": _TITLE_COLOR, "wrap": True,
-                 "margin": "md", "weight": "bold"}]
+        row = {"type": "text", "text": item["text"], "size": "xs", "color": _TITLE_COLOR, "wrap": True,
+               "margin": "md", "weight": "bold"}
+        if item.get("action"):
+            row["action"] = item["action"]
+            row["color"] = "#1565C0"  # 可點的行用藍色提示
+        rows = [row]
         if item.get("why"):
             rows.append({"type": "text", "text": item["why"], "size": "xxs", "color": _MUTED_COLOR, "wrap": True})
         return rows

@@ -117,4 +117,6 @@ def test_buy_check_sector_momentum_and_peers():
         content = json.dumps(rt.last_message()["contents"], ensure_ascii=False)
         assert "類股動能" in content
         assert "34 類中第 2 名" in content
-        assert "同業比較（近 5 日累計）：聯發科 +6.2%（連動 0.72）、日月光投控 +3.9%（連動 0.66）" in content
+        assert "同業比較（近 5 日累計，點同業可直接檢查）" in content
+        assert "› 聯發科 +6.2%（連動 0.72）" in content
+        assert '"text": "買2454"' in content  # 點同業 → 自動送出買進檢查
