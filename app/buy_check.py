@@ -1,8 +1,11 @@
-"""買進檢查（買2330）：把技術／籌碼／環境／訊號逐項攤開，每項附詳細白話。
+"""買進/賣出檢查（買2330／賣2330）：把技術／籌碼／環境／訊號逐項攤開，每項附詳細白話。
 
 原則同技術體檢：只陳列事實與解讀，不做預測、不給買賣建議。
 """
 import logging
+import re
+import time
+from html import unescape
 
 from .deps import Deps
 from .health import detailed_checks
@@ -18,6 +21,58 @@ _STREAK_WINDOW = 10  # 法人連續天數最多往回看的日數
 _TITLE_COLOR = "#333333"
 _MUTED_COLOR = "#777777"
 _SECTION_COLOR = "#1A237E"
+
+_ZCA_URL = "https://fubon-ebrokerdj.fbs.com.tw/z/zc/zca/zca_{stock_no}.djhtm"
+_ZCA_HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
+_PROFILE_TTL_SECONDS = 86400.0  # 營收比重一天抓一次就夠
+_REVENUE_MIX_MAX = 180
+_profile_cache: dict[str, tuple[float, str | None]] = {}
+_ROW_PATTERN = re.compile(r"<tr[^>]*>(.*?)</tr>", re.S | re.I)
+_CELL_PATTERN = re.compile(r"<t[dh][^>]*>(.*?)</t[dh]>", re.S | re.I)
+
+
+def parse_revenue_mix(html_text: str) -> str | None:
+    """MoneyDJ zca 基本資料頁 → 營收比重字串（公司靠什麼賺錢）。"""
+    for row_html in _ROW_PATTERN.findall(html_text):
+        cells = [unescape(re.sub(r"<[^>]+>", "", cell)).strip() for cell in _CELL_PATTERN.findall(row_html)]
+        for i, cell in enumerate(cells):
+            if cell == "營收比重" and i + 1 < len(cells) and cells[i + 1]:
+                return cells[i + 1]
+    return None
+
+
+async def _revenue_mix(deps: Deps, stock_no: str) -> str | None:
+    cached = _profile_cache.get(stock_no)
+    if cached and time.monotonic() - cached[0] < _PROFILE_TTL_SECONDS:
+        return cached[1]
+    mix = None
+    try:
+        scraper = deps.scrape_http or deps.http  # fubon 憑證瑕疵，走 verify=False 通道
+        response = await scraper.get(_ZCA_URL.format(stock_no=stock_no), headers=_ZCA_HEADERS, timeout=15)
+        response.raise_for_status()
+        response.encoding = "cp950"
+        mix = parse_revenue_mix(response.text)
+    except Exception:
+        logger.warning("營收比重擷取失敗 stock_no=%s", stock_no, exc_info=True)
+    _profile_cache[stock_no] = (time.monotonic(), mix)
+    return mix
+
+
+async def _company_profile_items(deps: Deps, stock: dict) -> list[dict]:
+    """「這家公司做什麼」：產業別＋營收比重（事實陳列，不計入有利/風險計數）。"""
+    items = []
+    industry = stock.get("industry")
+    market = f"・{stock['market']}" if stock.get("market") else ""
+    if industry:
+        items.append(_item(None, f"產業：{industry}{market}", ""))
+    mix = await _revenue_mix(deps, stock["stock_no"])
+    if mix:
+        text = mix if len(mix) <= _REVENUE_MIX_MAX else mix[:_REVENUE_MIX_MAX] + "…"
+        items.append(_item(None, f"營收比重：{text}", (
+            "營收比重顯示公司靠什麼賺錢：佔比最高的產品線決定它跟哪個景氣循環連動，"
+            "看新聞時可以對照「漲的理由」跟主要業務有沒有關係。"
+        )))
+    return items
 
 
 def _item(ok: bool | None, text: str, why: str) -> dict:
@@ -163,48 +218,73 @@ async def _market_env_items(deps: Deps) -> list[dict]:
     return items
 
 
-def _signal_items(signals: dict | None) -> list[dict]:
-    """支撐跌破法（楊忠憲）的買點條件：成立與否都列出來，附各自的意義。"""
+_SIGNAL_WHYS = {
+    "B1": "站上 5 日線且 5 日線上彎，是該書定義的「積極買點」：代表短線最敏感的均線已翻多。",
+    "B2": "帶量突破盤整區＋均線糾結＋中長紅，是勝率較高的「保守買點」：突破有量才算數。",
+    "B3": "20 日內第二次突破（二次突破），代表第一次突破後的洗盤結束，是「加碼點」而非首次進場點。",
+    "S1": "跌破 5 日線且 5 日線下彎，是該書的第一道出場警訊：強勢股不該跌破 5 日線。",
+    "S2": "向下跳空缺口或中長黑代表賣方力道強，常是波段轉折的起點。",
+    "S3": "跌破 10 日線＋KD 死亡交叉：第二道防線失守、動能翻空，波段結束機率大增。",
+    "S4": "跌破「突破那根紅 K」的中間值：起漲紅 K 是多方成本區，跌破一半代表突破失敗（假突破）。",
+    "S5": "跌破 20 日線且反彈無力：月線是最後一道防線，書中視為必須出場的訊號。",
+}
+
+
+def _signal_items(signals: dict | None, side: str) -> list[dict]:
+    """支撐跌破法（楊忠憲）的買/賣條件：成立與否都列出來，附各自的意義。
+
+    side="buy" 時成立算有利（進場點）；side="sell" 時成立算警訊（出場點）。
+    """
     if not signals:
         return []
-    whys = {
-        "B1": "站上 5 日線且 5 日線上彎，是該書定義的「積極買點」：代表短線最敏感的均線已翻多。",
-        "B2": "帶量突破盤整區＋均線糾結＋中長紅，是勝率較高的「保守買點」：突破有量才算數。",
-        "B3": "20 日內第二次突破（二次突破），代表第一次突破後的洗盤結束，是「加碼點」而非首次進場點。",
-    }
     items = []
-    for sig in signals.get("buy", []):
-        mark = "✅" if sig["on"] else "・"
+    for sig in signals.get(side, []):
+        mark = ("✅" if side == "buy" else "🚨") if sig["on"] else "・"
         status = "成立" if sig["on"] else "未成立"
+        graded = (True if side == "buy" else False) if sig["on"] else None
         items.append(_item(
-            True if sig["on"] else None,
+            graded,
             f"{mark} {sig['code']} {sig['label']}：{status}（{sig['text']}）",
-            whys.get(sig["code"], ""),
+            _SIGNAL_WHYS.get(sig["code"], ""),
         ))
     return items
 
 
-def _verdict_lines(favorable: int, risk: int, checks: list[dict], indicators: dict) -> list[str]:
+def _verdict_lines(mode: str, favorable: int, risk: int, checks: list[dict], indicators: dict,
+                   fired_sell: int = 0) -> list[str]:
     """依計數與情境給 1–2 句提醒（描述現況，不做預測）。"""
-    lines = [f"→ 有利 {favorable} 項：風險 {risk} 項（計數僅供快速掃視，權重請自行判斷）"]
     overheated = any("過熱" in c["text"] or "正乖離過大" in c["text"] for c in checks) or (
         (indicators.get("percent_b") or 0) >= 0.9
     )
     trend_down = any("均線向下" in c["text"] for c in checks)
-    if overheated and not trend_down:
-        lines.append("・情境判讀：趨勢偏多但短線偏熱——「好股票、壞價位」，等回測月線或中軌通常有更好的成本。")
-    elif trend_down:
-        lines.append("・情境判讀：趨勢面偏空——逆勢接刀勝率低，等月線翻揚再找進場點比較穩。")
+    if mode == "buy":
+        lines = [f"→ 有利 {favorable} 項：風險 {risk} 項（計數僅供快速掃視，權重請自行判斷）"]
+        if overheated and not trend_down:
+            lines.append("・情境判讀：趨勢偏多但短線偏熱——「好股票、壞價位」，等回測月線或中軌通常有更好的成本。")
+        elif trend_down:
+            lines.append("・情境判讀：趨勢面偏空——逆勢接刀勝率低，等月線翻揚再找進場點比較穩。")
+        else:
+            lines.append("・情境判讀：多空訊號混雜——分批小部位試單，比一次全押穩健。")
     else:
-        lines.append("・情境判讀：多空訊號混雜——分批小部位試單，比一次全押穩健。")
+        lines = [f"→ 續抱理由 {favorable} 項：出場警訊 {risk} 項（計數僅供快速掃視，權重請自行判斷）"]
+        if fired_sell >= 2 or trend_down:
+            lines.append("・情境判讀：多項出場警訊成立——分批減碼比一次全出容易執行，也遠比抱到破線凹單好。")
+        elif overheated:
+            lines.append("・情境判讀：結構未壞但短線過熱——可考慮先出一部分鎖住獲利，其餘設好停利點續抱。")
+        else:
+            lines.append("・情境判讀：續抱結構還在——與其預測高點，不如設好停利/停損線，跌破再執行。")
     lines.append("＊僅陳列事實供判讀，非投資建議")
     return lines
 
 
 async def build_buy_check_message(
-    deps: Deps, stock: dict, history: list[dict], image_url: str, indicators: dict
+    deps: Deps, stock: dict, history: list[dict], image_url: str, indicators: dict, mode: str = "buy"
 ) -> dict:
-    """組買進檢查 Flex：hero 放線圖，body 依有利/風險/訊號分區，每項附詳細說明。"""
+    """組買進/賣出檢查 Flex：hero 放線圖，body 依分區列出每一項＋詳細說明。
+
+    mode="buy"：有利／風險與注意＋買點訊號 B1–B3。
+    mode="sell"：續抱理由／出場警訊＋賣出訊號 S1–S5（視角換成「該不該出場」）。
+    """
     stock_no = stock["stock_no"]
     checks = detailed_checks(history)
     chips = []
@@ -222,10 +302,12 @@ async def build_buy_check_message(
         if item := _margin_item(margins):
             chips.append(item)
     except Exception:
-        logger.warning("買進檢查：籌碼資料取得失敗 stock_no=%s", stock_no, exc_info=True)
+        logger.warning("買賣檢查：籌碼資料取得失敗 stock_no=%s", stock_no, exc_info=True)
     boll = _bollinger_item(indicators)
     env = await _market_env_items(deps)
-    signals = _signal_items(evaluate_signals(history, stock.get("market")))
+    side = "buy" if mode == "buy" else "sell"
+    signals = _signal_items(evaluate_signals(history, stock.get("market")), side)
+    fired_sell = sum(1 for s in signals if s["ok"] is False)
 
     graded = checks + chips + ([boll] if boll else []) + env
     favorable = [c for c in graded if c["ok"] is True]
@@ -246,18 +328,25 @@ async def build_buy_check_message(
         return header + [row for item in items for row in _entry(item)]
 
     close = history[-1]["close"]
+    if mode == "buy":
+        title = f"🛒 買進檢查 {stock_no} {stock['name']}"
+        section_titles = (f"✅ 有利（{len(favorable)}）", f"⚠️ 風險與注意（{len(risks)}）", "🚨 買點訊號（支撐跌破法）")
+    else:
+        title = f"📤 賣出檢查 {stock_no} {stock['name']}"
+        section_titles = (f"✅ 續抱理由（{len(favorable)}）", f"⚠️ 出場警訊（{len(risks)}）", "🚨 賣出訊號（支撐跌破法）")
     body = [
-        {"type": "text", "text": f"🛒 買進檢查 {stock_no} {stock['name']}", "size": "md", "weight": "bold", "color": _TITLE_COLOR},
+        {"type": "text", "text": title, "size": "md", "weight": "bold", "color": _TITLE_COLOR},
         {"type": "text", "text": f"現價 {format_number(close)}", "size": "sm", "color": _MUTED_COLOR},
     ]
-    body += _section(f"✅ 有利（{len(favorable)}）", favorable)
-    body += _section(f"⚠️ 風險與注意（{len(risks)}）", risks)
-    body += _section("🚨 買點訊號（支撐跌破法）", signals)
+    body += _section("🏢 這家公司做什麼", await _company_profile_items(deps, stock))
+    body += _section(section_titles[0], favorable)
+    body += _section(section_titles[1], risks)
+    body += _section(section_titles[2], signals)
     body.append({"type": "separator", "margin": "lg"})
-    for line in _verdict_lines(len(favorable), len(risks), graded, indicators):
+    for line in _verdict_lines(mode, len(favorable), len(risks), graded, indicators, fired_sell):
         body.append({"type": "text", "text": line, "size": "xs", "color": _TITLE_COLOR, "wrap": True, "margin": "md"})
 
-    alt_lines = [f"🛒 買進檢查 {stock_no} {stock['name']}（{format_number(close)}）"]
+    alt_lines = [f"{title}（{format_number(close)}）"]
     alt_lines += [c["text"] for c in favorable + risks]
     bubble = {
         "type": "bubble",

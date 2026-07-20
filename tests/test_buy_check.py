@@ -40,3 +40,35 @@ def test_buy_check_insufficient_history():
         rt.send("登入dada")
         rt.send("買2330")  # 無歷史資料
         assert "資料不足" in rt.last_reply()
+
+
+def test_sell_check_flex_with_sell_signals():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        _seed_history(rt, "2330")
+        rt.send("賣2330")
+        message = rt.last_message()
+        assert message["type"] == "flex"
+        assert "賣出檢查" in message["altText"]
+        bubble = message["contents"]
+        assert bubble["hero"]["url"].startswith("http://testserver/charts/")
+        content = json.dumps(bubble, ensure_ascii=False)
+        assert "續抱理由" in content
+        assert "出場警訊" in content
+        assert "S1" in content and "S5" in content  # 賣訊逐項列出
+        assert "非投資建議" in content
+
+
+def test_sell_check_unknown_stock():
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.send("賣不存在的")
+        assert "找不到" in rt.last_reply()
+
+
+def test_parse_revenue_mix():
+    from app.buy_check import parse_revenue_mix
+
+    html = """<table><tr><td>營收比重</td><td>晶圓-5奈米30.98%、晶圓-3奈米20.85% (2025年)</td></tr></table>"""
+    assert parse_revenue_mix(html) == "晶圓-5奈米30.98%、晶圓-3奈米20.85% (2025年)"
+    assert parse_revenue_mix("<table><tr><td>其他</td></tr></table>") is None

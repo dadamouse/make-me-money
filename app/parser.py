@@ -19,7 +19,7 @@ HELP_TEXT = "\n".join(
         "　（代號 股數 成本，後兩項可省略）",
         "▸ -2330｜刪除持股",
         "▸ 圖2330｜技術分析圖",
-        "▸ 買2330｜買進前總檢查（附圖＋逐項解說）",
+        "▸ 買2330／賣2330｜買賣前總檢查（附圖＋逐項解說）",
         "▸ 訊號2330｜支撐跌破法買賣訊號",
         "▸ 清空持股｜需再回覆「確認」",
         "",
@@ -75,6 +75,8 @@ def parse_command(raw_text: str | None) -> Command:
         return Command(action="signal", stock=m.group(1))
     if m := re.fullmatch(r"買\s*(\S+)", text):
         return Command(action="buy_check", stock=m.group(1))
+    if m := re.fullmatch(r"賣\s*(\S+)", text):
+        return Command(action="sell_check", stock=m.group(1))
     if re.fullmatch(r"量增排行|量增", text):
         return Command(action="volume_rank")
     if re.fullmatch(r"每日選股|選股", text):

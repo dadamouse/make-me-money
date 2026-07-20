@@ -204,7 +204,9 @@ async def _apply_pick(deps: Deps, line_user_id: str, member: dict, cmd: Command,
     if pending_item["action"] == "chart":
         return await _render_chart_reply(deps, stock)
     if pending_item["action"] == "buy_check":
-        return await _render_buy_check_reply(deps, stock)
+        return await _render_buy_check_reply(deps, stock, mode="buy")
+    if pending_item["action"] == "sell_check":
+        return await _render_buy_check_reply(deps, stock, mode="sell")
     if pending_item["action"] == "signal":
         return await _render_signal_reply(deps, stock)
     return await _delete_holding(deps, member, stock, stock["stock_no"])
@@ -393,28 +395,30 @@ async def _handle_chart(deps: Deps, line_user_id: str, cmd: Command) -> str | di
     return await _render_chart_reply(deps, stock)
 
 
-async def _render_buy_check_reply(deps: Deps, stock: dict) -> str | dict:
-    """買進檢查：附線圖＋技術/籌碼/環境/訊號逐項詳解。"""
+async def _render_buy_check_reply(deps: Deps, stock: dict, mode: str = "buy") -> str | dict:
+    """買進/賣出檢查：附線圖＋技術/籌碼/環境/訊號逐項詳解。"""
+    label = "買進" if mode == "buy" else "賣出"
     history = await get_price_history(deps.db, deps.twse, stock["stock_no"], stock.get("market"))
     history = merge_realtime_bar(history, await deps.twse.fetch_realtime(stock["stock_no"], stock.get("market")))
     if len(history) < 30:
-        return f"❌ {_stock_label(stock)} 歷史資料不足（需至少 30 個交易日），買進檢查暫時做不出來。"
+        return f"❌ {_stock_label(stock)} 歷史資料不足（需至少 30 個交易日），{label}檢查暫時做不出來。"
     institutional = await fetch_chart_institutional(deps, stock["stock_no"])
     png = render_kline_png(history, f"{stock['stock_no']} {stock['name']}", institutional=institutional)
     chart_id = deps.charts.put(png)
     image_url = f"{deps.base_url}/charts/{chart_id}.png"
     indicators = compute_indicators(history)
-    return await build_buy_check_message(deps, stock, history, image_url, indicators)
+    return await build_buy_check_message(deps, stock, history, image_url, indicators, mode=mode)
 
 
-async def _handle_buy_check(deps: Deps, line_user_id: str, cmd: Command) -> str | dict:
+async def _handle_buy_check(deps: Deps, line_user_id: str, cmd: Command, mode: str = "buy") -> str | dict:
+    example = "買2330" if mode == "buy" else "賣2330"
     stock = await _resolve_stock(deps, cmd.stock)
     if not stock:
-        return f"❌ 找不到「{cmd.stock}」。請確認名稱（公司簡稱），或直接輸入代號，例如：買2330"
+        return f"❌ 找不到「{cmd.stock}」。請確認名稱（公司簡稱），或直接輸入代號，例如：{example}"
     if stock.get("candidates"):
-        deps.pending.put(line_user_id, {"action": "buy_check", "candidates": stock["candidates"]})
+        deps.pending.put(line_user_id, {"action": f"{mode}_check", "candidates": stock["candidates"]})
         return _candidates_reply(cmd.stock, stock["candidates"])
-    return await _render_buy_check_reply(deps, stock)
+    return await _render_buy_check_reply(deps, stock, mode=mode)
 
 
 async def _render_signal_reply(deps: Deps, stock: dict) -> str:
@@ -593,7 +597,9 @@ async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> 
     if cmd.action == "chart":
         return await _handle_chart(deps, line_user_id, cmd)
     if cmd.action == "buy_check":
-        return await _handle_buy_check(deps, line_user_id, cmd)
+        return await _handle_buy_check(deps, line_user_id, cmd, mode="buy")
+    if cmd.action == "sell_check":
+        return await _handle_buy_check(deps, line_user_id, cmd, mode="sell")
     if cmd.action == "signal":
         return await _handle_signal(deps, line_user_id, cmd)
     if cmd.action == "charts_all":
