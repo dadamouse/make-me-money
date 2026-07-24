@@ -1,0 +1,27 @@
+app/main.py
+  s_7e7fe61c7f8490::t_347fb5f237b06b 28,358-359
+app/premarket.py
+  s_7e7fe61c7f8490::t_347fb5f237b06b 9,324
+tests/test_sentinel.py
+  s_7e7fe61c7f8490::t_347fb5f237b06b 82-103
+app/quotes.py
+  s_7e7fe61c7f8490::t_09fccaa9bb5933 1-141
+tests/test_bot.py
+  s_7e7fe61c7f8490::t_aa0005ef52a5ff 854,858
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "2def108eddcbff9f41d4031df21bc1c71a3a2e81",
+  "prompts": {},
+  "sessions": {
+    "s_7e7fe61c7f8490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59fc179f-d8b1-4c7e-9d5c-32a2b7e046cc",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
