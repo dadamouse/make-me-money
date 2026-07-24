@@ -25,6 +25,7 @@ from .market_health import build_market_health_message
 from .parser import summarize_portfolio
 from .pending import PendingChoices
 from .premarket import build_open_brief
+from .quotes import daily_quote
 from .screener import format_picks_message, has_picks, run_daily_picks
 from .sentinel import run_sentinel
 from .snapshot import run_snapshot
@@ -354,7 +355,8 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             if user_ids:
                 health = await build_market_health_message(deps)
                 message = build_picks_message(result, format_picks_message(result), picks_web_url(deps))
-                await request.app.state.line.multicast(user_ids, [health, message])
+                # 尾端附大師警語（與早上盤前導航錯開，offset=1 取不同條）
+                await request.app.state.line.multicast(user_ids, [health, message, daily_quote(offset=1)])
                 pushed = len(user_ids)
                 _prefetch_pick_charts(request, result)  # 推播後先把入選股的圖備好
         logger.info("每日選股完成 pushed=%s", pushed)

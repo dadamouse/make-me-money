@@ -79,3 +79,25 @@ def test_intraday_sentinel_drop_alerts():
 def test_sentinel_requires_secret():
     with BotRuntime() as rt:
         assert rt.client.post("/admin/sentinel", headers={"x-cron-secret": "wrong"}).status_code == 403
+
+
+def test_daily_quote_rotation_and_pushes():
+    """大師警語：庫存 ≥100 條無重複；盤前導航與晚間選股尾端各帶一條（不同條）。"""
+    from app.quotes import QUOTES, daily_quote
+
+    assert len(QUOTES) >= 100
+    assert len(QUOTES) == len(set(QUOTES))
+    assert daily_quote().startswith("💬 ")
+    assert daily_quote() != daily_quote(offset=1)
+
+    with BotRuntime() as rt:
+        rt.send("登入dada", line_user_id="U-dada")
+        response = rt.client.post("/admin/morning-open", headers={"x-cron-secret": "cron-secret"})
+        assert response.json()["pushed"] == 1
+        assert "💬 " in rt.replies[-1]["messages"][0]["text"]
+
+        rt.postgrest.db["daily_closes"].append({"stock_no": "2330", "trade_date": "2026-07-10", "close": 2465.0})
+        rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "cron-secret"})
+        push = rt.replies[-1]
+        assert len(push["messages"]) == 3
+        assert push["messages"][2]["text"].startswith("💬 ")

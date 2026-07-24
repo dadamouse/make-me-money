@@ -6,6 +6,7 @@ import httpx
 
 from .deps import Deps
 from .parser import format_number, sign_of
+from .quotes import daily_quote
 
 logger = logging.getLogger(__name__)
 
@@ -320,4 +321,5 @@ async def build_open_brief(deps: Deps) -> str | None:
             lines.append("・融資大增 → 散戶搶進，追高風險升高（跌時賣壓會被放大）")
     lines.append("")
     lines.append("09:00 開盤，祝操作順利 📈")
+    lines.append(daily_quote())  # 大師警語每日輪播
     return "\n".join(lines)
