@@ -1,0 +1,38 @@
+tests/test_sentinel.py
+  s_7e7fe61c7f8490::t_c35649bc88eb42 1-81
+app/flex.py
+  s_7e7fe61c7f8490::t_c3bc2134c087ab 364-365,370-378
+supabase/cron.sql
+  s_7e7fe61c7f8490::t_63a6a2685119f7 154-179
+app/handlers.py
+  s_7e7fe61c7f8490::t_c3bc2134c087ab 22,649-650
+app/main.py
+  s_7e7fe61c7f8490::t_c3bc2134c087ab 29,363-383
+  s_7e7fe61c7f8490::t_41cec5a0c9a4ca 384
+tests/test_bot.py
+  s_7e7fe61c7f8490::t_9bfa3c947317ea 723-725
+  s_7e7fe61c7f8490::t_63a6a2685119f7 224
+app/market_health.py
+  s_7e7fe61c7f8490::t_c3bc2134c087ab 58-69
+app/sentinel.py
+  s_7e7fe61c7f8490::t_84513f75ba6c2b 1-192,194,196-263
+  s_7e7fe61c7f8490::t_6ab5e7b2d77758 193,195
+supabase/schema.sql
+  s_7e7fe61c7f8490::t_63a6a2685119f7 662-669
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "545f729db3b55e4a44f813100bbb68a19fde1bf9",
+  "prompts": {},
+  "sessions": {
+    "s_7e7fe61c7f8490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59fc179f-d8b1-4c7e-9d5c-32a2b7e046cc",
+        "model": "claude-fable-5"
+      },
+      "human_author": "dada <weida.chen@linecorp.com>"
+    }
+  }
+}
