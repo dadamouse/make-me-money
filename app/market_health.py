@@ -55,6 +55,18 @@ def _streak(values: list[float]) -> tuple[int, str]:
     return count, "買超" if positive else "賣超"
 
 
+async def market_regime_warning(deps: Deps) -> str | None:
+    """大盤收月線下時的環境警語（選股卡用）；資料不足或在月線上回 None。"""
+    try:
+        series_desc, _ = await _index_series_with_realtime(deps)
+        closes = [float(row["taiex"]) for row in reversed(series_desc)]
+        if len(closes) >= 20 and closes[-1] < sum(closes[-20:]) / 20:
+            return "⚠️ 大盤收月線下（環境偏空）：突破/強勢型策略勝率下降，名單僅供觀察，新倉宜小。"
+    except Exception:
+        logger.warning("環境警語計算失敗", exc_info=True)
+    return None
+
+
 async def build_market_health(deps: Deps) -> str:
     lines = []
     notes = []  # 白話解讀（描述現況，不做預測）

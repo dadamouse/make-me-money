@@ -221,6 +221,7 @@ class FakePostgrest:
             "daily_market": [],
             "weekly_holders": [],
             "daily_broker_flows": [],
+            "alert_log": [],
         }
         self._next_id = 1
 
@@ -719,7 +720,9 @@ def test_daily_picks_flex_carousel():
         assert "🎯 每日選股" in message["altText"]
         carousel = message["contents"]
         assert carousel["type"] == "carousel"
-        assert len(carousel["contents"]) == 8  # 八個策略各一張卡片（籌碼集中移至週六週報）
+        # 八策略＋一張環境警語卡（fixture 大盤 45479 收在月線下 → 警語出現）
+        assert len(carousel["contents"]) == 9
+        assert "大盤收月線下" in json.dumps(carousel["contents"][0], ensure_ascii=False)
         content = json.dumps(carousel, ensure_ascii=False)
         assert "法人連買 3 日" in content
         assert "外資或投信連續 3 個交易日買超" in content  # 篩選邏輯說明

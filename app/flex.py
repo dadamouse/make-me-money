@@ -361,12 +361,21 @@ def _picks_strategy_bubble(section: dict, index: int, date_label: str, web_url: 
     return bubble
 
 
-def build_picks_message(result: dict, alt_text: str, web_url: str | None = None) -> dict:
-    """每日選股 Flex：每個策略一張卡片的 carousel，個股點擊可看線圖。"""
+def build_picks_message(result: dict, alt_text: str, web_url: str | None = None, warning: str | None = None) -> dict:
+    """每日選股 Flex：每個策略一張卡片的 carousel，個股點擊可看線圖；warning 為環境警語卡（放最前）。"""
     date_label = result["date"][5:].replace("-", "/")
     bubbles = [
         _picks_strategy_bubble(section, i, date_label, web_url) for i, section in enumerate(result["sections"])
     ]
+    if warning:
+        bubbles.insert(0, {
+            "type": "bubble",
+            "body": {
+                "type": "box", "layout": "vertical", "backgroundColor": "#B71C1C", "paddingAll": "16px",
+                "contents": [_text(warning, size="sm", weight="bold", color="#FFFFFF", wrap=True)],
+            },
+        })
+        alt_text = warning + "\n" + alt_text
     return {"type": "flex", "altText": alt_text[:400], "contents": {"type": "carousel", "contents": bubbles}}
 
 

@@ -26,6 +26,7 @@ from .parser import summarize_portfolio
 from .pending import PendingChoices
 from .premarket import build_open_brief
 from .screener import format_picks_message, has_picks, run_daily_picks
+from .sentinel import run_sentinel
 from .snapshot import run_snapshot
 from .supabase import SupabaseClient
 from .twse import TwseClient, sync_stocks
@@ -358,6 +359,28 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
                 _prefetch_pick_charts(request, result)  # 推播後先把入選股的圖備好
         logger.info("每日選股完成 pushed=%s", pushed)
         return {"ok": True, "pushed": pushed, "date": result["date"]}
+
+    @app.post("/admin/sentinel")
+    async def sentinel_endpoint(request: Request, mode: str = "close") -> dict:
+        """哨兵：盤後（23:00）掃持股警訊與大盤警報；盤中（整點）掃急跌。狀態改變才推播。"""
+        _check_cron_secret(request)
+        result = await run_sentinel(request.app.state.deps, mode=mode)
+        pushed = 0
+        if result["market"]:
+            bindings = await request.app.state.deps.db.get("line_bindings?select=line_user_id")
+            user_ids = [b["line_user_id"] for b in bindings]
+            if user_ids:
+                title = "🛎 大盤警報" if mode == "intraday" else "🛎 大盤警報（盤後）"
+                await request.app.state.line.multicast(user_ids, f"{title}\n" + "\n".join(result["market"]))
+                pushed += len(user_ids)
+        for line_user_id, text in result["personal"].items():
+            try:
+                await request.app.state.line.push(line_user_id, text)
+                pushed += 1
+            except httpx.HTTPError:
+                logger.warning("哨兵推播失敗 user=%s", line_user_id, exc_info=True)
+        logger.info("哨兵完成 mode=%s market=%s personal=%s", mode, len(result["market"]), len(result["personal"]))
+        return {"ok": True, "market_alerts": len(result["market"]), "personal_alerts": len(result["personal"]), "pushed": pushed}
 
     @app.post("/admin/daily-snapshot")
     async def daily_snapshot(request: Request) -> dict:

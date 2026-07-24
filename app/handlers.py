@@ -19,7 +19,7 @@ from .buy_check import build_buy_check_message
 from .health import build_health_report
 from .history import get_price_history, merge_realtime_bar, read_batch
 from .indicators import compute_indicators
-from .market_health import build_market_health_message
+from .market_health import build_market_health_message, market_regime_warning
 from .news import build_stock_news_message, fetch_stock_news
 from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number, parse_command
 from .screener import format_picks_message, run_daily_picks
@@ -646,4 +646,5 @@ def picks_web_url(deps: Deps) -> str:
 
 async def _handle_picks(deps: Deps) -> dict:
     result = await run_daily_picks(deps)
-    return build_picks_message(result, format_picks_message(result), picks_web_url(deps))
+    warning = await market_regime_warning(deps)
+    return build_picks_message(result, format_picks_message(result), picks_web_url(deps), warning=warning)

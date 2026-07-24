@@ -659,3 +659,11 @@ language sql stable as $$
   order by cc.c desc
   limit limit_n
 $$;
+
+-- 哨兵去重：同一警報鍵同日只推播一次（避免同日重跑重複轟炸）
+create table if not exists alert_log (
+  alert_key text not null,
+  alert_date date not null,
+  created_at timestamptz not null default now(),
+  primary key (alert_key, alert_date)
+);
