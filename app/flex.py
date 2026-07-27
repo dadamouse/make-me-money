@@ -371,8 +371,8 @@ def build_picks_message(result: dict, alt_text: str, web_url: str | None = None,
         bubbles.insert(0, {
             "type": "bubble",
             "body": {
-                "type": "box", "layout": "vertical", "backgroundColor": "#B71C1C", "paddingAll": "16px",
-                "contents": [_text(warning, size="sm", weight="bold", color="#FFFFFF", wrap=True)],
+                "type": "box", "layout": "vertical", "paddingAll": "16px",
+                "contents": [_text(warning, size="sm", weight="bold", color="#B71C1C", wrap=True)],
             },
         })
         alt_text = warning + "\n" + alt_text
