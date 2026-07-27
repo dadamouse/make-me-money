@@ -415,6 +415,18 @@ class BotRuntime:
     def __exit__(self, *args):
         return self._client_ctx.__exit__(*args)
 
+    def follow(self, line_user_id: str = "U-test", channel: int = 1) -> httpx.Response:
+        """模擬使用者加好友（follow 事件）。"""
+        payload = {"events": [{"type": "follow", "replyToken": "reply-token", "source": {"userId": line_user_id}}]}
+        raw = json.dumps(payload).encode()
+        secret = self.settings.line_channel_secret if channel == 1 else self.settings.line2_channel_secret
+        signature = base64.b64encode(hmac.new(secret.encode(), raw, hashlib.sha256).digest()).decode()
+        return self.client.post(
+            "/webhook/line" if channel == 1 else "/webhook/line2",
+            content=raw,
+            headers={"x-line-signature": signature, "content-type": "application/json"},
+        )
+
     def send(self, text: str, line_user_id: str = "U-test", bad_signature: bool = False, channel: int = 1) -> httpx.Response:
         payload = {
             "events": [

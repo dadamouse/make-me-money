@@ -22,7 +22,7 @@ from .holders import holders_summary_line, sync_holders
 from .line_client import LineClient, verify_signature
 from .market_calendar import is_scheduled_closed_today, taipei_today_iso
 from .market_health import build_market_health_message
-from .parser import summarize_portfolio
+from .parser import HELP_TEXT, summarize_portfolio
 from .pending import PendingChoices
 from .premarket import build_open_brief
 from .quotes import daily_quote
@@ -438,6 +438,14 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         payload = json.loads(body)
         handled = 0
         for event in payload.get("events", []):
+            if event.get("type") == "follow":
+                # 加好友即回覆功能選單（含「登入你的名字」引導）
+                try:
+                    await client.reply(event["replyToken"], HELP_TEXT)
+                    handled += 1
+                except httpx.HTTPError:
+                    logger.exception("加好友歡迎訊息回覆失敗")
+                continue
             if event.get("type") != "message" or (event.get("message") or {}).get("type") != "text":
                 continue
             line_user_id = (event.get("source") or {}).get("userId")

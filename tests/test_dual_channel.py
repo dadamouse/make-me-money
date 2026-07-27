@@ -107,3 +107,21 @@ def test_morning_open_allowlist_is_case_insensitive_on_login_casing():
         response = rt.client.post("/admin/morning-open", headers={"x-cron-secret": "cron-secret"})
         assert response.json()["pushed"] == 1
         assert _multicasts(rt)[0]["body"]["to"] == ["U-rita"]
+
+
+def test_follow_event_replies_help_menu():
+    """加好友（follow 事件）自動回覆功能選單。"""
+    with BotRuntime(settings=SETTINGS2) as rt:
+        response = rt.follow(line_user_id="U-new", channel=1)
+        assert response.status_code == 200
+        assert response.json()["handled"] == 1
+        assert "功能選單" in rt.last_reply()
+        assert rt.line_calls[-1]["auth"] == "Bearer access-token"
+
+
+def test_follow_event_on_channel_2_replies_via_channel_2_token():
+    with BotRuntime(settings=SETTINGS2) as rt:
+        response = rt.follow(line_user_id="U-new2", channel=2)
+        assert response.status_code == 200
+        assert "功能選單" in rt.last_reply()
+        assert rt.line_calls[-1]["auth"] == "Bearer access-token-2"
