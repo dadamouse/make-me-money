@@ -43,6 +43,9 @@ from .weekly import build_weekly_outlook, build_weekly_report
 
 _STOCK_NO_PATTERN = re.compile(r"[0-9]{4,6}[A-Z]?")
 
+# 早盤導航只推這些成員（其他人傳「早盤」可隨時手動查，reply 不計推播額度）
+MORNING_PUSH_MEMBERS = ("cindy", "Rita", "dada")
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -56,6 +59,9 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         scrape_http = httpx.AsyncClient(transport=transport, timeout=30, verify=False)
         app.state.settings = cfg
         app.state.line = LineClient(http, cfg.line_channel_access_token)
+        app.state.line_clients = {1: app.state.line}
+        if cfg.line2_channel_secret and cfg.line2_channel_access_token:
+            app.state.line_clients[2] = LineClient(http, cfg.line2_channel_access_token)
         app.state.deps = Deps(
             db=SupabaseClient(http, cfg.supabase_url, cfg.supabase_service_role_key),
             twse=TwseClient(http),
@@ -233,13 +239,20 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         state.backfill_task = asyncio.create_task(run())
         return state.backfill_status
 
+    def _line_for(request: Request, channel: int | None) -> LineClient | None:
+        return request.app.state.line_clients.get(channel or 1)
+
     async def _push_personal(request: Request, builder, only_member: str | None = None) -> int:
         """對每位已綁定成員，各自產生內容並推播；only_member 指定時只推該成員（手動重推用）。"""
         deps = request.app.state.deps
-        bindings = await deps.db.get("line_bindings?select=line_user_id,member_id")
+        bindings = await deps.db.get("line_bindings?select=line_user_id,member_id,channel")
         pushed = 0
         for binding in bindings:
             if not binding.get("member_id"):
+                continue
+            client = _line_for(request, binding.get("channel"))
+            if client is None:
+                logger.warning("channel %s 未設定，略過 user=%s", binding.get("channel"), binding["line_user_id"])
                 continue
             members = await deps.db.get(f"members?id=eq.{binding['member_id']}&select=id,name")
             if not members:
@@ -250,20 +263,34 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             if not text:
                 continue
             try:
-                await request.app.state.line.push(binding["line_user_id"], text)
+                await client.push(binding["line_user_id"], text)
                 pushed += 1
             except httpx.HTTPError:
                 logger.warning("推播失敗 user=%s", binding["line_user_id"], exc_info=True)
         return pushed
 
-    async def _broadcast(request: Request, message: str | dict) -> int:
+    async def _broadcast(
+        request: Request, message: str | dict | list, member_names: tuple[str, ...] | None = None
+    ) -> int:
+        """按綁定的 channel 分組 multicast；member_names 指定時只推那些成員（名稱以資料庫為準）。"""
         deps = request.app.state.deps
-        bindings = await deps.db.get("line_bindings?select=line_user_id")
-        user_ids = [b["line_user_id"] for b in bindings]
-        if not user_ids:
-            return 0
-        await request.app.state.line.multicast(user_ids, message)
-        return len(user_ids)
+        bindings = await deps.db.get("line_bindings?select=line_user_id,member_id,channel")
+        if member_names is not None:
+            members = await deps.db.get(f"members?name=in.({','.join(member_names)})&select=id")
+            allowed_ids = {m["id"] for m in members}
+            bindings = [b for b in bindings if b.get("member_id") in allowed_ids]
+        groups: dict[int, list[str]] = {}
+        for binding in bindings:
+            groups.setdefault(binding.get("channel") or 1, []).append(binding["line_user_id"])
+        pushed = 0
+        for channel, user_ids in sorted(groups.items()):
+            client = _line_for(request, channel)
+            if client is None:
+                logger.warning("channel %s 未設定 access token，略過 %s 位使用者", channel, len(user_ids))
+                continue
+            await client.multicast(user_ids, message)
+            pushed += len(user_ids)
+        return pushed
 
     @app.post("/admin/morning-macro")
     async def morning_macro(request: Request) -> dict:
@@ -283,7 +310,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         if brief is None:
             logger.info("MIS 資料日非今日（颱風臨時休市），跳過盤前導航")
             return {"ok": True, "pushed": 0, "skipped": "stale mis date"}
-        pushed = await _broadcast(request, brief)
+        pushed = await _broadcast(request, brief, member_names=MORNING_PUSH_MEMBERS)
         logger.info("盤前導航 pushed=%s", pushed)
         return {"ok": True, "pushed": pushed}
 
@@ -350,14 +377,11 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         result = await run_daily_picks(deps)
         pushed = 0
         if has_picks(result):
-            bindings = await deps.db.get("line_bindings?select=line_user_id")
-            user_ids = [b["line_user_id"] for b in bindings]
-            if user_ids:
-                health = await build_market_health_message(deps)
-                message = build_picks_message(result, format_picks_message(result), picks_web_url(deps))
-                # 尾端附大師警語（與早上盤前導航錯開，offset=1 取不同條）
-                await request.app.state.line.multicast(user_ids, [health, message, daily_quote(offset=1)])
-                pushed = len(user_ids)
+            health = await build_market_health_message(deps)
+            message = build_picks_message(result, format_picks_message(result), picks_web_url(deps))
+            # 尾端附大師警語（與早上盤前導航錯開，offset=1 取不同條）
+            pushed = await _broadcast(request, [health, message, daily_quote(offset=1)])
+            if pushed:
                 _prefetch_pick_charts(request, result)  # 推播後先把入選股的圖備好
         logger.info("每日選股完成 pushed=%s", pushed)
         return {"ok": True, "pushed": pushed, "date": result["date"]}
@@ -369,15 +393,19 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         result = await run_sentinel(request.app.state.deps, mode=mode)
         pushed = 0
         if result["market"]:
-            bindings = await request.app.state.deps.db.get("line_bindings?select=line_user_id")
-            user_ids = [b["line_user_id"] for b in bindings]
-            if user_ids:
-                title = "🛎 大盤警報" if mode == "intraday" else "🛎 大盤警報（盤後）"
-                await request.app.state.line.multicast(user_ids, f"{title}\n" + "\n".join(result["market"]))
-                pushed += len(user_ids)
+            title = "🛎 大盤警報" if mode == "intraday" else "🛎 大盤警報（盤後）"
+            pushed += await _broadcast(request, f"{title}\n" + "\n".join(result["market"]))
+        channel_of: dict[str, int] = {}
+        if result["personal"]:
+            rows = await request.app.state.deps.db.get("line_bindings?select=line_user_id,channel")
+            channel_of = {r["line_user_id"]: r.get("channel") or 1 for r in rows}
         for line_user_id, text in result["personal"].items():
+            client = _line_for(request, channel_of.get(line_user_id))
+            if client is None:
+                logger.warning("channel %s 未設定，哨兵略過 user=%s", channel_of.get(line_user_id), line_user_id)
+                continue
             try:
-                await request.app.state.line.push(line_user_id, text)
+                await client.push(line_user_id, text)
                 pushed += 1
             except httpx.HTTPError:
                 logger.warning("哨兵推播失敗 user=%s", line_user_id, exc_info=True)
@@ -396,11 +424,15 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         logger.info("每日快照完成 stocks=%s result=%s", stocks_synced, result)
         return {"ok": True, "stocks_synced": stocks_synced, **result}
 
-    @app.post("/webhook/line")
-    async def line_webhook(request: Request, background_tasks: BackgroundTasks) -> dict:
+    async def _line_webhook_impl(request: Request, background_tasks: BackgroundTasks, channel: int) -> dict:
+        cfg = request.app.state.settings
+        secret = cfg.line_channel_secret if channel == 1 else cfg.line2_channel_secret
+        client = _line_for(request, channel)
+        if not secret or client is None:
+            raise HTTPException(status_code=404, detail="channel not configured")
         body = await request.body()
         signature = request.headers.get("x-line-signature")
-        if not verify_signature(request.app.state.settings.line_channel_secret, body, signature):
+        if not verify_signature(secret, body, signature):
             raise HTTPException(status_code=403, detail="invalid line signature")
 
         payload = json.loads(body)
@@ -411,7 +443,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             line_user_id = (event.get("source") or {}).get("userId")
             text = event["message"]["text"]
             try:
-                result = await handle_text(request.app.state.deps, line_user_id, text)
+                result = await handle_text(request.app.state.deps, line_user_id, text, channel=channel)
             except Exception as error:
                 logger.exception("指令處理失敗 text=%s", text[:100])
                 result = f"⚠️ 系統錯誤：{error}"
@@ -419,7 +451,7 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             if isinstance(result, DeferredReply):
                 # 先立刻回覆 ack，完成後用 push 送真正內容（避免 replyToken 30 秒過期）
                 try:
-                    await request.app.state.line.reply(event["replyToken"], result.ack_text)
+                    await client.reply(event["replyToken"], result.ack_text)
                     handled += 1
                 except httpx.HTTPError:
                     logger.exception("LINE ack 回覆失敗 text=%s", text[:100])
@@ -427,18 +459,27 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
                 async def _push_deferred(uid: str, deferred: DeferredReply) -> None:
                     try:
                         content = await deferred.builder()
-                        await request.app.state.line.push(uid, content)
+                        await client.push(uid, content)
                     except Exception:
                         logger.exception("DeferredReply push 失敗 user=%s", uid)
 
                 background_tasks.add_task(_push_deferred, line_user_id, result)
             else:
                 try:
-                    await request.app.state.line.reply(event["replyToken"], result)
+                    await client.reply(event["replyToken"], result)
                     handled += 1
                 except httpx.HTTPError:
                     logger.exception("LINE 回覆失敗 text=%s", text[:100])
         return {"ok": True, "handled": handled}
+
+    @app.post("/webhook/line")
+    async def line_webhook(request: Request, background_tasks: BackgroundTasks) -> dict:
+        return await _line_webhook_impl(request, background_tasks, channel=1)
+
+    @app.post("/webhook/line2")
+    async def line_webhook2(request: Request, background_tasks: BackgroundTasks) -> dict:
+        """第二個官方帳號（免費額度分流）的 webhook；未設定 LINE2_* 時回 404。"""
+        return await _line_webhook_impl(request, background_tasks, channel=2)
 
     return app
 

@@ -66,7 +66,7 @@ async def _get_acting_member(deps: Deps, line_user_id: str) -> dict | None:
     return members[0] if members else None
 
 
-async def _handle_login(deps: Deps, line_user_id: str, name: str) -> str:
+async def _handle_login(deps: Deps, line_user_id: str, name: str, channel: int = 1) -> str:
     member = await _get_member_by_name(deps, name)
     if not member:
         created = await deps.db.insert("members", {"name": name})
@@ -77,6 +77,7 @@ async def _handle_login(deps: Deps, line_user_id: str, name: str) -> str:
             "line_user_id": line_user_id,
             "member_id": member["id"],
             "acting_member_id": member["id"],
+            "channel": channel,  # 從哪個官方帳號登入就綁哪個（換帳號重新登入即搬家）
             "updated_at": _now_iso(),
         },
         prefer="return=representation,resolution=merge-duplicates",
@@ -549,14 +550,14 @@ async def _handle_news(deps: Deps, member: dict) -> str:
 _BATCH_MAX_LINES = 30
 
 
-async def handle_text(deps: Deps, line_user_id: str | None, text: str) -> str | dict:
+async def handle_text(deps: Deps, line_user_id: str | None, text: str, channel: int = 1) -> str | dict:
     """單行走一般指令；多行訊息逐行執行（批次新增/刪除用）。"""
     lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
     if len(lines) <= 1:
-        return await handle_command(deps, line_user_id, parse_command(text))
+        return await handle_command(deps, line_user_id, parse_command(text), channel=channel)
     replies = []
     for line in lines[:_BATCH_MAX_LINES]:
-        result = await handle_command(deps, line_user_id, parse_command(line))
+        result = await handle_command(deps, line_user_id, parse_command(line), channel=channel)
         replies.append(result if isinstance(result, str) else "（卡片類指令請單獨輸入）")
     if len(lines) > _BATCH_MAX_LINES:
         replies.append(f"⚠️ 一次最多處理 {_BATCH_MAX_LINES} 行，其餘 {len(lines) - _BATCH_MAX_LINES} 行未執行")
@@ -581,11 +582,11 @@ async def _handle_confirm(deps: Deps, line_user_id: str, member: dict) -> str:
     return f"🗑 已清空「{member['name']}」的持股，共刪除 {len(deleted)} 筆。"
 
 
-async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command) -> str | dict:
+async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command, channel: int = 1) -> str | dict:
     if not line_user_id:
         return HELP_TEXT
     if cmd.action == "login":
-        return await _handle_login(deps, line_user_id, cmd.name)
+        return await _handle_login(deps, line_user_id, cmd.name, channel)
     if cmd.action == "switch":
         return await _handle_switch(deps, line_user_id, cmd.name)
     if cmd.action == "help":

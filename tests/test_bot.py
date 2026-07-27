@@ -303,9 +303,11 @@ MIS_FIXTURES = {
 
 
 class BotRuntime:
-    def __init__(self, twse_response=TWSE_OK, rpc_overrides=None, holiday_fixture=None, mis_fixtures=None):
+    def __init__(self, twse_response=TWSE_OK, rpc_overrides=None, holiday_fixture=None, mis_fixtures=None, settings=None):
         self.postgrest = FakePostgrest()
+        self.settings = settings or SETTINGS
         self.replies = []
+        self.line_calls = []  # 每筆 LINE API 呼叫的 url/auth/body（驗證雙 channel 路由用）
         self.rpc_fixtures = {**RPC_FIXTURES, **(rpc_overrides or {})}
         self.holiday_fixture = holiday_fixture or []
         self.mis_fixtures = MIS_FIXTURES if mis_fixtures is None else mis_fixtures
@@ -313,7 +315,9 @@ class BotRuntime:
         def route(request: httpx.Request) -> httpx.Response:
             url = str(request.url)
             if url.startswith("https://api.line.me/"):
-                self.replies.append(json.loads(request.content))
+                body = json.loads(request.content)
+                self.replies.append(body)
+                self.line_calls.append({"url": url, "auth": request.headers.get("Authorization"), "body": body})
                 return httpx.Response(200, json={})
             if url.startswith("https://query1.finance.yahoo.com/v8/finance/chart/"):
                 symbol = unquote(url.split("/chart/")[1].split("?")[0])
@@ -394,7 +398,7 @@ class BotRuntime:
                 return httpx.Response(200, json=self.postgrest.handle(request.method, table, request.url.params, body))
             raise AssertionError(f"unexpected url {url}")
 
-        app = create_app(settings=SETTINGS, transport=httpx.MockTransport(route))
+        app = create_app(settings=self.settings, transport=httpx.MockTransport(route))
         self._client_ctx = TestClient(app)
 
     def __enter__(self):
@@ -411,7 +415,7 @@ class BotRuntime:
     def __exit__(self, *args):
         return self._client_ctx.__exit__(*args)
 
-    def send(self, text: str, line_user_id: str = "U-test", bad_signature: bool = False) -> httpx.Response:
+    def send(self, text: str, line_user_id: str = "U-test", bad_signature: bool = False, channel: int = 1) -> httpx.Response:
         payload = {
             "events": [
                 {
@@ -423,13 +427,14 @@ class BotRuntime:
             ]
         }
         raw = json.dumps(payload).encode()
+        secret = self.settings.line_channel_secret if channel == 1 else self.settings.line2_channel_secret
         signature = (
             "bogus"
             if bad_signature
-            else base64.b64encode(hmac.new(SETTINGS.line_channel_secret.encode(), raw, hashlib.sha256).digest()).decode()
+            else base64.b64encode(hmac.new(secret.encode(), raw, hashlib.sha256).digest()).decode()
         )
         return self.client.post(
-            "/webhook/line",
+            "/webhook/line" if channel == 1 else "/webhook/line2",
             content=raw,
             headers={"x-line-signature": signature, "content-type": "application/json"},
         )

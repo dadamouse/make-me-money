@@ -18,6 +18,8 @@ class Settings:
     line_channel_access_token: str
     cron_secret: str = ""  # 選用：每日快照端點的驗證 token，未設定則端點停用
     base_url: str = "https://dadamouse-line-stock-bot.hf.space"  # 對外可及的網址（線圖圖片用）
+    line2_channel_secret: str = ""  # 選用：第二個官方帳號（免費額度分流），兩者都設定才啟用
+    line2_channel_access_token: str = ""
 
 
 def load_settings() -> Settings:
@@ -31,4 +33,6 @@ def load_settings() -> Settings:
         line_channel_access_token=os.environ["LINE_CHANNEL_ACCESS_TOKEN"],
         cron_secret=os.environ.get("CRON_SECRET", ""),
         base_url=os.environ.get("BASE_URL", "https://dadamouse-line-stock-bot.hf.space").rstrip("/"),
+        line2_channel_secret=os.environ.get("LINE2_CHANNEL_SECRET", ""),
+        line2_channel_access_token=os.environ.get("LINE2_CHANNEL_ACCESS_TOKEN", ""),
     )

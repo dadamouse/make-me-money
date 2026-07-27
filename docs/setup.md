@@ -20,6 +20,19 @@
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role key |
 | `LINE_CHANNEL_SECRET` | LINE channel 的 Channel secret |
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE channel 的 Channel access token |
+| `LINE2_CHANNEL_SECRET` | （選用）第二個官方帳號的 Channel secret |
+| `LINE2_CHANNEL_ACCESS_TOKEN` | （選用）第二個官方帳號的 Channel access token |
+
+### 雙官方帳號分流（免費額度 200 則/月 × 2）
+
+免費方案每個官方帳號每月只有 200 則推播；設定第二個帳號可把成員分成兩群分攤額度：
+
+1. 到 [LINE Developers Console](https://developers.line.biz/console/) 同一個 Provider 下建第二個 Messaging API channel
+2. 把 Channel secret／access token 設到上表的 `LINE2_*` secrets（兩者都設才會啟用）
+3. 新 channel 的 Webhook URL 填 `https://dadamouse-line-stock-bot.hf.space/webhook/line2`，開 Use webhook、關自動回應
+4. 要搬家的成員：加新官方帳號好友 → 傳「登入自己的名字」→ 綁定自動改到新帳號（channel 2），之後推播走新帳號額度
+
+早盤導航（08:35）只推 `MORNING_PUSH_MEMBERS`（`app/main.py`）名單內的成員；其他人傳「早盤」隨時可查（reply 不計推播額度）。
 
 ## 3. 部署到 HF Space
 
