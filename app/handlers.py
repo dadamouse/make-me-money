@@ -20,6 +20,7 @@ from .health import build_health_report
 from .history import get_price_history, merge_realtime_bar, read_batch
 from .indicators import compute_indicators
 from .market_health import build_market_health_message, market_regime_warning
+from .premarket import build_open_brief
 from .news import build_stock_news_message, fetch_stock_news
 from .parser import HELP_TEXT, MENU_ACTIONS, Command, aggregate_holdings, format_number, parse_command
 from .screener import format_picks_message, run_daily_picks
@@ -82,6 +83,8 @@ async def _handle_login(deps: Deps, line_user_id: str, name: str, channel: int =
         },
         prefer="return=representation,resolution=merge-duplicates",
     )
+    # 兩個官方帳號的 Provider 不同、同一人 userId 不同：搬家登入後清掉舊 channel 綁定，避免重複推播
+    await deps.db.delete(f"line_bindings?member_id=eq.{member['id']}&channel=neq.{channel}")
     return f"✅ 已登入「{member['name']}」，之後的操作都會記在這個身份。"
 
 
@@ -597,6 +600,9 @@ async def handle_command(deps: Deps, line_user_id: str | None, cmd: Command, cha
         return await _handle_picks(deps)
     if cmd.action == "health":  # 大盤體檢，不需身份
         return await build_market_health_message(deps)
+    if cmd.action == "morning":  # 盤前導航，不需身份（reply 不計推播額度）
+        brief = await build_open_brief(deps)
+        return brief or "😴 今日休市或盤前資料尚未更新，開盤日 08:30 後再試。"
     member = await _get_acting_member(deps, line_user_id)
     if not member:
         return "👋 請先輸入「登入你的名字」開始使用，例如：登入dada"

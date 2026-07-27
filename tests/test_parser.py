@@ -144,3 +144,14 @@ def test_summarize_total_pnl_excludes_costless_holdings():
     summary = summarize_portfolio(entries)
     assert summary["total_value"] == 1_100_000 + 500_000  # 總市值照算
     assert summary["total_pnl"] == 100_000  # 總損益不含無成本那檔
+
+
+def test_parse_morning_brief_keywords():
+    assert parse_command("早盤").action == "morning"
+    assert parse_command("盤前").action == "morning"
+
+
+def test_help_text_mentions_morning_brief():
+    from app.parser import HELP_TEXT
+
+    assert "早盤" in HELP_TEXT

@@ -125,3 +125,14 @@ def test_follow_event_on_channel_2_replies_via_channel_2_token():
         assert response.status_code == 200
         assert "功能選單" in rt.last_reply()
         assert rt.line_calls[-1]["auth"] == "Bearer access-token-2"
+
+
+def test_login_on_new_channel_removes_stale_binding_on_other_channel():
+    """不同 Provider 下同一人 userId 不同：搬家登入後要清掉舊 channel 的綁定，避免重複推播。"""
+    with BotRuntime(settings=SETTINGS2) as rt:
+        rt.send("登入dada", line_user_id="U-old", channel=1)
+        rt.send("登入dada", line_user_id="U-new", channel=2)
+        bindings = rt.postgrest.db["line_bindings"]
+        assert len(bindings) == 1
+        assert bindings[0]["line_user_id"] == "U-new"
+        assert bindings[0]["channel"] == 2

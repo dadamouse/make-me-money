@@ -232,6 +232,8 @@ class FakePostgrest:
                 continue
             if value.startswith("eq."):
                 filters.append(lambda row, k=key, v=value[3:]: str(row.get(k)) == v)
+            elif value.startswith("neq."):
+                filters.append(lambda row, k=key, v=value[4:]: str(row.get(k)) != v)
             elif value.startswith("in.(") and value.endswith(")"):
                 allowed = value[4:-1].split(",")
                 filters.append(lambda row, k=key, a=allowed: str(row.get(k)) in a)

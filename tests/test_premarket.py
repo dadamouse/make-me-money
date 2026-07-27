@@ -151,3 +151,15 @@ def test_fetch_quote_without_meta_is_unknown():
             return await fetch_quote(http, "^N225")
 
     assert asyncio.run(go())["is_today"] is None
+
+
+def test_morning_keyword_replies_premarket_brief():
+    """使用者傳「早盤」隨時可查盤前導航（reply 不計推播額度）。"""
+    with BotRuntime() as rt:
+        rt.send("登入dada")
+        rt.postgrest.db["daily_closes"] += [
+            {"stock_no": "2330", "trade_date": "2026-07-06", "close": 2445.0},
+            {"stock_no": "0050", "trade_date": "2026-07-06", "close": 108.25},
+        ]
+        rt.send("早盤")
+        assert "盤前導航" in rt.last_reply()
