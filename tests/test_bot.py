@@ -317,6 +317,9 @@ class BotRuntime:
         def route(request: httpx.Request) -> httpx.Response:
             url = str(request.url)
             if url.startswith("https://api.line.me/"):
+                if url.endswith("/v2/bot/info"):
+                    self.line_calls.append({"url": url, "auth": request.headers.get("Authorization"), "body": None})
+                    return httpx.Response(200, json={"basicId": "@fake-bot", "displayName": "假機器人"})
                 body = json.loads(request.content)
                 self.replies.append(body)
                 self.line_calls.append({"url": url, "auth": request.headers.get("Authorization"), "body": body})

@@ -360,6 +360,18 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         _check_cron_secret(request)
         return {"ok": True, **await _start_backfill(request)}
 
+    @app.get("/admin/bot-info")
+    async def bot_info(request: Request) -> dict:
+        """回報各 channel 官方帳號自身資訊（basicId、displayName），token 只在 Space 環境有。"""
+        _check_cron_secret(request)
+        info = {}
+        for channel, client in request.app.state.line_clients.items():
+            try:
+                info[str(channel)] = await client.bot_info()
+            except Exception as exc:
+                info[str(channel)] = {"error": str(exc)[:200]}
+        return {"ok": True, "channels": info}
+
     @app.post("/admin/daily-picks")
     async def daily_picks(request: Request) -> dict:
         """由 pg_cron 於晚間快照後呼叫：跑選股並推播給所有綁定的使用者。"""

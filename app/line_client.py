@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 MULTICAST_URL = "https://api.line.me/v2/bot/message/multicast"
 PUSH_URL = "https://api.line.me/v2/bot/message/push"
+BOT_INFO_URL = "https://api.line.me/v2/bot/info"
 _MAX_TEXT_LENGTH = 4900
 _MULTICAST_MAX_RECIPIENTS = 500
 
@@ -58,6 +59,15 @@ class LineClient:
             json={"to": user_id, "messages": [self._payload(message)]},
         )
         _raise_with_detail(response, "push")
+
+    async def bot_info(self) -> dict:
+        """取得官方帳號自身資訊（basicId、displayName 等）。"""
+        response = await self._http.get(
+            BOT_INFO_URL,
+            headers={"Authorization": f"Bearer {self._access_token}"},
+        )
+        _raise_with_detail(response, "bot_info")
+        return response.json()
 
     async def multicast(self, user_ids: list[str], messages: str | dict | list) -> None:
         """主動推播給多位使用者；可一次帶多則訊息（LINE 上限 5 則）。"""

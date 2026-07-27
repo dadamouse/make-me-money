@@ -136,3 +136,19 @@ def test_login_on_new_channel_removes_stale_binding_on_other_channel():
         assert len(bindings) == 1
         assert bindings[0]["line_user_id"] == "U-new"
         assert bindings[0]["channel"] == 2
+
+
+def test_admin_bot_info_reports_each_channel():
+    with BotRuntime(settings=SETTINGS2) as rt:
+        response = rt.client.get("/admin/bot-info", headers={"x-cron-secret": "cron-secret"})
+        assert response.status_code == 200
+        channels = response.json()["channels"]
+        assert set(channels) == {"1", "2"}
+        assert channels["1"]["basicId"] == "@fake-bot"
+        auths = [c["auth"] for c in rt.line_calls if c["url"].endswith("/v2/bot/info")]
+        assert auths == ["Bearer access-token", "Bearer access-token-2"]
+
+
+def test_admin_bot_info_rejects_bad_secret():
+    with BotRuntime() as rt:
+        assert rt.client.get("/admin/bot-info", headers={"x-cron-secret": "wrong"}).status_code == 403
