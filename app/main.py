@@ -288,8 +288,12 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
             if client is None:
                 logger.warning("channel %s 未設定 access token，略過 %s 位使用者", channel, len(user_ids))
                 continue
-            await client.multicast(user_ids, message)
-            pushed += len(user_ids)
+            try:
+                await client.multicast(user_ids, message)
+                pushed += len(user_ids)
+            except httpx.HTTPError:
+                # 單一 channel 失敗（如當月額度 429）不可中斷，其他 channel 照推
+                logger.warning("channel %s multicast 失敗，略過 %s 位使用者", channel, len(user_ids), exc_info=True)
         return pushed
 
     @app.post("/admin/morning-macro")

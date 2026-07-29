@@ -310,6 +310,7 @@ class BotRuntime:
         self.settings = settings or SETTINGS
         self.replies = []
         self.line_calls = []  # 每筆 LINE API 呼叫的 url/auth/body（驗證雙 channel 路由用）
+        self.line_errors = {}  # auth header → 回傳的錯誤 status（模擬單一 channel 額度耗盡等）
         self.rpc_fixtures = {**RPC_FIXTURES, **(rpc_overrides or {})}
         self.holiday_fixture = holiday_fixture or []
         self.mis_fixtures = MIS_FIXTURES if mis_fixtures is None else mis_fixtures
@@ -322,7 +323,10 @@ class BotRuntime:
                     return httpx.Response(200, json={"basicId": "@fake-bot", "displayName": "假機器人"})
                 body = json.loads(request.content)
                 self.replies.append(body)
-                self.line_calls.append({"url": url, "auth": request.headers.get("Authorization"), "body": body})
+                auth = request.headers.get("Authorization")
+                self.line_calls.append({"url": url, "auth": auth, "body": body})
+                if auth in self.line_errors:
+                    return httpx.Response(self.line_errors[auth], json={"message": "You have reached your monthly limit."})
                 return httpx.Response(200, json={})
             if url.startswith("https://query1.finance.yahoo.com/v8/finance/chart/"):
                 symbol = unquote(url.split("/chart/")[1].split("?")[0])

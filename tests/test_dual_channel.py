@@ -152,3 +152,17 @@ def test_admin_bot_info_reports_each_channel():
 def test_admin_bot_info_rejects_bad_secret():
     with BotRuntime() as rt:
         assert rt.client.get("/admin/bot-info", headers={"x-cron-secret": "wrong"}).status_code == 403
+
+
+def test_broadcast_skips_quota_exhausted_channel_and_pushes_the_rest():
+    """channel 1 額度 429 不可中斷推播——channel 2 的成員仍要收到（2026-07-28 實際事故）。"""
+    with BotRuntime(settings=SETTINGS2) as rt:
+        rt.send("登入Gino", line_user_id="U-gino", channel=1)
+        rt.send("登入dada", line_user_id="U-dada", channel=2)
+        rt.postgrest.db["daily_closes"].append({"stock_no": "2330", "trade_date": "2026-07-10", "close": 2465.0})
+        rt.line_errors["Bearer access-token"] = 429  # channel 1 當月額度耗盡
+        response = rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "cron-secret"})
+        assert response.status_code == 200
+        assert response.json()["pushed"] == 1
+        by_auth = {c["auth"]: c["body"]["to"] for c in _multicasts(rt)}
+        assert by_auth["Bearer access-token-2"] == ["U-dada"]
