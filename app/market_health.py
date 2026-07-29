@@ -212,8 +212,8 @@ def _health_flex_lines(text: str) -> list[dict]:
     return components
 
 
-async def build_market_health_message(deps: Deps) -> dict:
-    """大盤體檢卡片：hero 放加權指數走勢圖，body 放數據與白話解讀。"""
+async def build_market_health_message(deps: Deps, footer_note: str | None = None) -> dict:
+    """大盤體檢卡片：hero 放加權指數走勢圖，body 放數據與白話解讀；footer_note 附加於卡片尾端（如大師警語）。"""
     text = await build_market_health(deps)
     title = text.split("\n")[0]
     bubble = {
@@ -228,6 +228,11 @@ async def build_market_health_message(deps: Deps) -> dict:
         },
         "body": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": _health_flex_lines(text)},
     }
+    if footer_note:
+        bubble["body"]["contents"].append(
+            {"type": "text", "text": footer_note, "size": "xxs", "color": "#9E9E9E", "wrap": True, "margin": "lg"}
+        )
+        text = text + "\n" + footer_note
     try:
         series_desc, _ = await _index_series_with_realtime(deps)
         if len(series_desc) >= 5:

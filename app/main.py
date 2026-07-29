@@ -393,10 +393,10 @@ def create_app(settings: Settings | None = None, transport: httpx.AsyncBaseTrans
         result = await run_daily_picks(deps)
         pushed = 0
         if has_picks(result):
-            health = await build_market_health_message(deps)
+            # 大師警語併入健檢卡尾端（與早上盤前導航錯開，offset=1 取不同條）
+            health = await build_market_health_message(deps, footer_note=daily_quote(offset=1))
             message = build_picks_message(result, format_picks_message(result), picks_web_url(deps))
-            # 尾端附大師警語（與早上盤前導航錯開，offset=1 取不同條）
-            pushed = await _broadcast(request, [health, message, daily_quote(offset=1)])
+            pushed = await _broadcast(request, [health, message])
             if pushed:
                 _prefetch_pick_charts(request, result)  # 推播後先把入選股的圖備好
         logger.info("每日選股完成 pushed=%s", pushed)

@@ -877,11 +877,11 @@ def test_daily_picks_push_includes_health():
         rt.postgrest.db["daily_closes"].append({"stock_no": "2330", "trade_date": "2026-07-10", "close": 2465.0})
         rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "cron-secret"})
         push = rt.replies[-1]
-        assert len(push["messages"]) == 3  # 體檢＋選股＋大師警語
+        assert len(push["messages"]) == 2  # 體檢（含大師警語）＋選股
         assert push["messages"][0]["type"] == "flex"
         assert "大盤體檢" in push["messages"][0]["altText"]
+        assert "💬 " in json.dumps(push["messages"][0]["contents"], ensure_ascii=False)  # 大師警語併入體檢卡
         assert push["messages"][1]["type"] == "flex"
-        assert push["messages"][2]["text"].startswith("💬 ")
 
 
 def test_picks_web_page():

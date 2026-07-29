@@ -152,18 +152,18 @@ select cron.schedule(
   $$
 );
 
--- 平日 23:00（台北）盤後哨兵：持股賣訊/指標變化＋大盤警報（狀態改變才推播）
-select cron.schedule(
-  'daily-sentinel-close',
-  '0 15 * * 1-5',
-  $$
-  select net.http_post(
-    url := 'https://dadamouse-line-stock-bot.hf.space/admin/sentinel?mode=close',
-    headers := '{"x-cron-secret": "YOUR_CRON_SECRET"}'::jsonb,
-    timeout_milliseconds := 90000
-  );
-  $$
-);
+-- （已停用 2026-07-29）平日 23:00（台北）盤後哨兵：太晚推播且耗免費額度，經 dada 決定取消
+-- select cron.schedule(
+--   'daily-sentinel-close',
+--   '0 15 * * 1-5',
+--   $$
+--   select net.http_post(
+--     url := 'https://dadamouse-line-stock-bot.hf.space/admin/sentinel?mode=close',
+--     headers := '{"x-cron-secret": "YOUR_CRON_SECRET"}'::jsonb,
+--     timeout_milliseconds := 90000
+--   );
+--   $$
+-- );
 
 -- 平日盤中每小時（台北 9:05–13:05）盤中哨兵：大盤急跌 2%／持股急跌 5%
 select cron.schedule(

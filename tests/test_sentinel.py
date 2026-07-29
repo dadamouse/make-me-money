@@ -1,4 +1,6 @@
 """哨兵測試：盤後持股警訊、大盤警報、盤中急跌、同日去重。"""
+import json
+
 from test_bot import BotRuntime
 
 # 大盤序列（新到舊）：今日 45479 跌破月線且單日 -2.3%；昨日 46556 在月線上 → 兩則警報
@@ -99,5 +101,6 @@ def test_daily_quote_rotation_and_pushes():
         rt.postgrest.db["daily_closes"].append({"stock_no": "2330", "trade_date": "2026-07-10", "close": 2465.0})
         rt.client.post("/admin/daily-picks", headers={"x-cron-secret": "cron-secret"})
         push = rt.replies[-1]
-        assert len(push["messages"]) == 3
-        assert push["messages"][2]["text"].startswith("💬 ")
+        assert len(push["messages"]) == 2  # 名言併入健檢卡尾端，不佔獨立訊息物件
+        health_json = json.dumps(push["messages"][0], ensure_ascii=False)
+        assert "💬 " in health_json
