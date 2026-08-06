@@ -226,6 +226,21 @@ async def _macro_section(http: httpx.AsyncClient) -> tuple[list[str], list[str]]
     return lines, _interpret_macro(quotes, adr, fx)
 
 
+def margin_maintenance_note(pct: float) -> str | None:
+    """全市場融資維持率白話解讀；160–170% 中性區間不出解讀行。"""
+    if pct < 150:
+        return "・融資維持率跌破 150% → 全市場逼近斷頭區，恐慌賣壓一觸即發"
+    if pct < 160:
+        return "・融資維持率 150–160% → 追繳壓力浮現，反彈易被融資賣壓蓋掉"
+    if pct >= 170:
+        return "・融資維持率在 170% 以上 → 槓桿在安全水位，散戶部位健康"
+    return None
+
+
+async def _latest_margin_maintenance(deps: Deps) -> list[dict]:
+    return await deps.db.get("market_margin?select=trade_date,maintenance_pct&order=trade_date.desc&limit=2")
+
+
 async def _yesterday_taiwan_summary(deps: Deps) -> list[str]:
     lines = []
     closes = await deps.db.get("daily_closes?stock_no=eq.0050&select=trade_date,close&order=trade_date.desc&limit=2")
@@ -242,6 +257,11 @@ async def _yesterday_taiwan_summary(deps: Deps) -> list[str]:
         if summary.get("margin_change") is not None:
             change = float(summary["margin_change"])
             lines.append(f"融資增減 {sign_of(change)}{format_number(round(change))} 張")
+    maintenance = await _latest_margin_maintenance(deps)
+    if maintenance:
+        latest = float(maintenance[0]["maintenance_pct"])
+        prev = f"（前日 {float(maintenance[1]['maintenance_pct']):.1f}%）" if len(maintenance) > 1 else ""
+        lines.append(f"融資維持率 {latest:.1f}%{prev}")
     return lines
 
 
@@ -319,6 +339,10 @@ async def build_open_brief(deps: Deps) -> str | None:
             lines.append("・融資減少 → 散戶槓桿退場中，籌碼趨於乾淨（偏正面）")
         elif change > 50000:
             lines.append("・融資大增 → 散戶搶進，追高風險升高（跌時賣壓會被放大）")
+    maintenance = await _latest_margin_maintenance(deps)
+    if maintenance:
+        if note := margin_maintenance_note(float(maintenance[0]["maintenance_pct"])):
+            lines.append(note)
     lines.append("")
     lines.append("09:00 開盤，祝操作順利 📈")
     lines.append(daily_quote())  # 大師警語每日輪播

@@ -235,6 +235,43 @@ def otc_dividend_rows(data: list[dict]) -> list[dict]:
     return rows
 
 
+def credit_financing_amount(payload: dict) -> float | None:
+    """TWSE 信用交易彙總（selectType=MS）→ 上市融資餘額金額（仟元）。"""
+    if payload.get("stat") != "OK":
+        return None
+    for table in payload.get("tables") or []:
+        for row in table.get("data") or []:
+            if row and str(row[0]).startswith("融資金額"):
+                return _num(row[-1])
+    return None
+
+
+async def _market_margin_rows(db: SupabaseClient, twse: TwseClient, trade_date: str | None) -> list[dict]:
+    """全市場融資維持率＝上市擔保品市值（自家餘額×收盤價）÷ 融資餘額金額；資料未公布時跳過。"""
+    if not trade_date:
+        return []
+    try:
+        payload = await twse.fetch_credit_summary(trade_date.replace("-", ""))
+    except httpx.HTTPError:
+        logger.warning("信用交易彙總查詢失敗 date=%s", trade_date, exc_info=True)
+        return []
+    financing = credit_financing_amount(payload)
+    if not financing:
+        return []
+    rows = await db.rpc("margin_collateral_value", {"p_trade_date": trade_date})
+    collateral = _num(rows[0].get("collateral_value")) if rows else None
+    if not collateral:
+        return []
+    return [
+        {
+            "trade_date": trade_date,
+            "financing_amount": financing,
+            "collateral_value": collateral,
+            "maintenance_pct": round(collateral / financing * 100, 1),
+        }
+    ]
+
+
 # ---------- 主流程 ----------
 async def _upsert(db: SupabaseClient, table: str, conflict: str, key_fields: tuple, rows: list[dict]) -> int:
     unique = {tuple(row[k] for k in key_fields): row for row in rows}
@@ -293,6 +330,10 @@ async def run_snapshot(db: SupabaseClient, twse: TwseClient) -> dict:
 
     closes = await _upsert(db, "daily_closes", "stock_no,trade_date", ("stock_no", "trade_date"), close_rows)
     margins = await _upsert(db, "daily_margins", "stock_no,trade_date", ("stock_no", "trade_date"), margin_rows)
+    # 維持率需要當日餘額與收盤價都已入庫（RPC 從 DB 彙總），故放在兩者 upsert 之後
+    market_margin = await _upsert(
+        db, "market_margin", "trade_date", ("trade_date",), await _market_margin_rows(db, twse, listed_trade_date)
+    )
     institutional = await _upsert(
         db, "daily_institutional", "stock_no,trade_date", ("stock_no", "trade_date"), institutional_rows
     )
@@ -305,5 +346,6 @@ async def run_snapshot(db: SupabaseClient, twse: TwseClient) -> dict:
         "institutional": institutional,
         "dividends": dividends,
         "market": market,
+        "market_margin": market_margin,
         "trade_dates": trade_dates,
     }

@@ -22,6 +22,7 @@ MARKET_MONTH_URL = "https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK"
 TPEX_COMPANIES_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TPEX_QUOTES_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
 TPEX_MARGINS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_margin_balance"
+CREDIT_SUMMARY_URL = "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN"
 TPEX_DIVIDENDS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_exright_prepost"
 TPEX_NEWS_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O"
 TPEX_INSTITUTIONAL_URL = "https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading"
@@ -144,6 +145,10 @@ class TwseClient:
 
     async def fetch_otc_margins(self) -> list[dict]:
         return await self._get_json(TPEX_MARGINS_URL)
+
+    async def fetch_credit_summary(self, date_yyyymmdd: str) -> dict:
+        """上市信用交易統計彙總（含融資餘額金額，算全市場融資維持率用）。"""
+        return await self._get_json(f"{CREDIT_SUMMARY_URL}?date={date_yyyymmdd}&selectType=MS&response=json")
 
     async def fetch_listed_dividends(self) -> list[dict]:
         return await self._get_json(LISTED_DIVIDENDS_URL)

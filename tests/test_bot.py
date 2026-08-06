@@ -46,6 +46,21 @@ LISTED_MARGINS = [
     {"股票代號": "2330", "融資今日餘額": "25,000", "融資前日餘額": "24,000", "融券今日餘額": "500", "融券前日餘額": "600"},
 ]
 
+CREDIT_SUMMARY = {
+    "stat": "OK",
+    "tables": [
+        {
+            "title": "115年07月02日信用交易統計",
+            "fields": ["項目", "買進", "賣出", "現金(券)償還", "前日餘額", "今日餘額"],
+            "data": [
+                ["融資(交易單位)", "478,902", "566,111", "43,613", "9,032,012", "8,901,190"],
+                ["融券(交易單位)", "33,305", "36,425", "2,868", "196,970", "197,222"],
+                ["融資金額(仟元)", "41,806,109", "38,557,958", "3,928,528", "300,712,000", "300,000,000"],
+            ],
+        }
+    ],
+}
+
 LISTED_DIVIDENDS = [
     {"Date": "1150709", "Code": "2330", "Name": "台積電", "Exdividend": "息", "CashDividend": "5.00", "StockDividendRatio": ""},
 ]
@@ -131,6 +146,7 @@ def _market_series_fixture():
 
 RPC_FIXTURES = {
     "market_series": _market_series_fixture(),
+    "margin_collateral_value": [{"collateral_value": 501_000_000}],
     "market_flow_series": [
         {"trade_date": "2026-07-06", "insti_net": -242258868, "margin_chg": -42283},
         {"trade_date": "2026-07-03", "insti_net": 120316000, "margin_chg": 102565},
@@ -219,6 +235,7 @@ class FakePostgrest:
             "daily_institutional": [],
             "dividend_events": [],
             "daily_market": [],
+            "market_margin": [],
             "weekly_holders": [],
             "daily_broker_flows": [],
             "alert_log": [],
@@ -337,6 +354,8 @@ class BotRuntime:
                     200,
                     json={"chart": {"result": [{"meta": {"symbol": symbol}, "indicators": {"quote": [{"close": closes}]}}]}},
                 )
+            if url.startswith("https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN"):
+                return httpx.Response(200, json=CREDIT_SUMMARY)
             if url.startswith("https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK"):
                 return httpx.Response(
                     200,
